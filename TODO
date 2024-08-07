@@ -1,0 +1,6 @@
+- Parse all allowed query method(PING, FIND_NODE, FIND_VALUE, STORE)
+- Implement ADNL or integrate existing implementation from tonutils-go
+- Integrate key-value storage, with leveldb, badge or any other option
+- Implement clean up process in node when with a shutdown signal
+- Write during the process unit tests for all components
+- Update README file with extensive description
