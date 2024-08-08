@@ -1,12 +1,17 @@
 package dht
 
 import (
+	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"log"
+	"math"
 	"math/big"
 	"net"
 	"os"
+	"sort"
+	"sync"
+	"time"
 
 	"github.com/xssnick/tonutils-go/tl"
 )
@@ -40,6 +45,7 @@ type storage interface {
 type bucket []*nodeDescription
 
 type nodeDescription struct {
+	id PublicKeyED25519
 	// ip address of the node
 	ip net.IP
 	// port of node
@@ -53,6 +59,7 @@ type nodeDescription struct {
 }
 
 type Node struct {
+	id PublicKeyED25519
 	// values table stores key-values in the distributed hash table(dht)
 	// using temporary storage just for demonstration
 	table storage
@@ -60,7 +67,7 @@ type Node struct {
 	// routing table, i-th bucket contains known nodes that lie
 	// at a Kademlia distance from 2*i to 2**(i+1) - 1, from the node address
 	// "best" nodes should be first, defining by "best" those which round trip delay is smaller
-	routeTable [256]*bucket
+	routeTable [256]bucket
 
 	// TON DHT uses ADNL as the transport layer to communicate between nodes
 	adnl adnl
@@ -73,6 +80,13 @@ type Node struct {
 	semiPermanentAddress *big.Int
 
 	logger *log.Logger
+	// availabilityTracker tracks the PING/PONG response delays with other nodes
+	// storing id:timestamp
+	availabilityTracker map[int64]int64
+	// idxMap keeps track of node.id:idx in routing table, to avoid re-computing this index
+	idxMap map[*big.Int]int
+
+	mu sync.Mutex
 }
 
 // New initialize a new node
@@ -136,10 +150,29 @@ func (n *Node) handleReceivedCMD(msg ADNLMsg, errChn chan<- error) {
 func (n *Node) boot() {}
 
 // SendPing performs a PING command to a given node.
-func (n *Node) SendPing(dst *Node) {
-	data := make([]byte, 0)
+func (n *Node) SendPing(dst *Node) error {
+	id, _ := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
+	ping := Ping{
+		ID: id.Int64(),
+	}
+	data, err := tl.Serialize(&ping, true)
+	if err != nil {
+		return err
+	}
+
 	// send ping command to dst
-	n.adnl.Send(dst, data)
+	go n.adnl.Send(dst, data)
+
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	// save availability tracker
+	ts := time.Now().Unix()
+	n.availabilityTracker[id.Int64()] = ts
+	// update lastPingTs in route table
+	n.updateNodeLastPingTs(dst, ts)
+
+	return nil
 }
 
 // SendPong sends a PONG response to dst.
@@ -202,8 +235,15 @@ func (n *Node) ReceivePong(src *Node, data []byte) error {
 		return err
 	}
 
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	// update availability track of nodes
-	// TODO: implement availability mechanism
+	lastTs := n.availabilityTracker[cmd.ID]
+	delay := time.Now().Unix() - lastTs
+	delete(n.availabilityTracker, cmd.ID)
+	n.updateNodeDelay(src, delay)
+
 	return nil
 }
 
@@ -244,4 +284,54 @@ func (n *Node) ReceiveFindValue(src *Node, data []byte) error {
 
 	// TODO: implement FIND_VALUE mechanims
 	return nil
+}
+
+// updateNodeDelay given a known node m, update its delay information in the routing table.
+// should be used with a write mutex
+func (n *Node) updateNodeDelay(m *Node, delay int64) {
+	idx, bIdx := n.findNodeInRouteTable(m)
+	if idx == -1 || bIdx == -1 {
+		return
+	}
+
+	n.routeTable[idx][bIdx].delay = delay
+	// if the new delay is "best" than previous elements in bucket
+	// then should be replace in the right position
+	// re-sorting the bucket according to their delays
+	sort.Slice(n.routeTable[idx], func(i, j int) bool {
+		return n.routeTable[idx][i].delay < n.routeTable[idx][j].delay
+	})
+}
+
+// updateNodeLastPingTs given a known node m, update its delay information in the routing table.
+// should be used with a mutex
+func (n *Node) updateNodeLastPingTs(m *Node, lastTs int64) {
+	idx, bIdx := n.findNodeInRouteTable(m)
+	if idx == -1 || bIdx == -1 {
+		return
+	}
+
+	n.routeTable[idx][bIdx].lastPingTs = lastTs
+}
+
+// findNodeInRouteTable finds a node m, routeTable index and bucket index.
+func (n *Node) findNodeInRouteTable(m *Node) (int, int) {
+	idx, ok := n.idxMap[m.id.Key]
+	if !ok {
+		d := KademliaDistance(n.id.Key, m.id.Key)
+		idx = DistanceIdx(d)
+		if idx >= 256 {
+			return -1, -1
+		}
+	}
+
+	b := n.routeTable[idx]
+	// find node in bucket to update the delay,
+	// using binary search for finding this node
+	// bucket b needs to be sorted
+	bIdx := sort.Search(len(b), func(i int) bool {
+		return b[i].id.Key.Cmp(m.id.Key) == 0
+	})
+
+	return idx, bIdx
 }
