@@ -63,6 +63,11 @@ type FindValue struct {
 	K   int      `tl:"int"`
 }
 
+type ValueResult struct {
+	Value *Value  `tl:"dht.Value"`
+	Nodes []*Node `tl:"dht.Nodes"`
+}
+
 type PrivateKeyAES struct {
 	Key *big.Int `tl:"int256"`
 }

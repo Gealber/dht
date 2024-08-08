@@ -22,6 +22,10 @@ func DistanceIdx(d *big.Int) int {
 		i++
 	}
 
+	if i >= 256 {
+		return 255
+	}
+
 	return i
 }
 

@@ -40,6 +40,9 @@ dht.value key:dht.keyDescription value:bytes ttl:int signature:bytes = dht.Value
 
 dht.pong random_id:long = dht.Pong;
 
+dht.valueNotFound nodes:dht.nodes = dht.ValueResult;
+dht.valueFound value:dht.Value = dht.ValueResult;
+
 ---functions---
 
 dht.ping random_id:long = dht.Pong;
