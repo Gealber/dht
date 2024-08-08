@@ -1,5 +1,11 @@
+## TODO
+
+This todo list will increase and decrease according to the progress. Don't take as definetely list of what to implement.
+
 - [DONE] Parse all allowed query method(PING, FIND_NODE, FIND_VALUE, STORE). To re-check later.
-- Implement availability mechanism when a PONG is received
+- [DONE] Implement availability mechanism when a PONG is received. Needs to make sure buckets are sorted.
+    - [DONE] Make sure that routing table buckets are sorted after each update of delays tracker
+    - [DONE] Place mutex to avoid race conditions
 - Implement ADNL or integrate existing implementation from tonutils-go
 - Integrate key-value storage, with leveldb, badge or any other option
 - Implement clean up process in node when with a shutdown signal

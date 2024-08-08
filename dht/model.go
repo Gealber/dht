@@ -68,7 +68,7 @@ type PrivateKeyAES struct {
 }
 
 type PublicKeyED25519 struct {
-	Keyy *big.Int `tl:"int256"`
+	Key *big.Int `tl:"int256"`
 }
 
 type PublicKeyAES struct {
