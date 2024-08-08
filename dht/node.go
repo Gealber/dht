@@ -2,6 +2,7 @@ package dht
 
 import (
 	"encoding/hex"
+	"fmt"
 	"log"
 	"math/big"
 	"net"
@@ -18,12 +19,17 @@ var (
 	FindValueID = TLID("dht.findValue key:int256 k:int = dht.ValueResult")
 )
 
+type ADNLMsg struct {
+	src  *Node
+	data []byte
+}
+
 type adnl interface {
 	Send(dst *Node, data []byte)
 	// Receive return a channel of data that is assumed to be
 	// a structure serialized with TL, including 4-byte prefix(a boxed scheme)
 	// indicating the scheme ID
-	Receive() <-chan []byte
+	Receive() <-chan ADNLMsg
 }
 
 type storage interface {
@@ -87,44 +93,40 @@ func (n *Node) Run() {
 	errChn := make(chan error, 1)
 	// process errors
 	go func(<-chan error) {
-
 		for err := range errChn {
-			n.logger.Printf("error: %s", err)
+			if err != nil {
+				n.logger.Printf("error: %s\n", err)
+			}
 		}
 
 	}(errChn)
 
 	// listen on incomming messages
 	for data := range n.adnl.Receive() {
-		go n.handleCMD(data, errChn)
+		go n.handleReceivedCMD(data, errChn)
 	}
 }
 
-func (n *Node) handleCMD(data []byte, errChn chan<- error) {
-	if len(data) < 4 {
+func (n *Node) handleReceivedCMD(msg ADNLMsg, errChn chan<- error) {
+	if len(msg.data) < 4 {
 		return
 	}
 
 	// read first four bytes from data to identify command scheme ID
-	cmdID := hex.EncodeToString(data[:4])
+	cmdID := hex.EncodeToString(msg.data[:4])
 	switch cmdID {
 	case PingID:
-		// parse ping command
-		pcmd := Ping{}
-		_, err := tl.Parse(&pcmd, data, true)
-		if err != nil {
-			errChn <- err
-			return
-		}
-
-		// respond with received id
+		errChn <- n.ReceivePing(msg.src, msg.data)
 	case PongID:
+		errChn <- n.ReceivePong(msg.src, msg.data)
 	case FindNodeID:
+		errChn <- n.ReceiveFindNode(msg.src, msg.data)
 	case FindValueID:
+		errChn <- n.ReceiveFindValue(msg.src, msg.data)
 	case StoreID:
+		errChn <- n.ReceiveStore(msg.src, msg.data)
 	default:
-		// unknown method
-		return
+		errChn <- fmt.Errorf("unknown cmd received with data: %x", msg.data)
 	}
 }
 
@@ -141,10 +143,19 @@ func (n *Node) SendPing(dst *Node) {
 }
 
 // SendPong sends a PONG response to dst.
-func (n *Node) SendPong(dst *Node) {
-	data := make([]byte, 0)
-	// send ping command to dst
-	n.adnl.Send(dst, data)
+func (n *Node) SendPong(dst *Node, id int64) error {
+	pong := Pong{
+		ID: id,
+	}
+	respData, err := tl.Serialize(&pong, true)
+	if err != nil {
+		return err
+	}
+
+	// respond with received id
+	n.adnl.Send(dst, respData)
+
+	return nil
 }
 
 // SendStore send STORE command to dst key-value on value table.
@@ -171,15 +182,66 @@ func (n *Node) SendFindValue(dst *Node, key *big.Int) {
 }
 
 // ReceivePing handle PING command from src node.
-func (n *Node) ReceivePing(src *Node) {
-	// parse ping
+func (n *Node) ReceivePing(src *Node, data []byte) error {
+	// parse ping command
+	var cmd Ping
+	_, err := tl.Parse(&cmd, data, true)
+	if err != nil {
+		return err
+	}
+
+	return n.SendPong(src, cmd.ID)
+}
+
+// ReceivePong handle PONG response from src node.
+func (n *Node) ReceivePong(src *Node, data []byte) error {
+	// parse pong command
+	var cmd Pong
+	_, err := tl.Parse(&cmd, data, true)
+	if err != nil {
+		return err
+	}
+
+	// update availability track of nodes
+	// TODO: implement availability mechanism
+	return nil
 }
 
 // ReceiveStore handle incomming STORE key-value on value table.
-func (n *Node) ReceiveStore(key *big.Int, val []byte) {}
+func (n *Node) ReceiveStore(src *Node, data []byte) error {
+	// parse STORE command
+	var cmd Store
+	_, err := tl.Parse(&cmd, data, true)
+	if err != nil {
+		return err
+	}
+
+	// TODO: implement receive STORE mechanism
+	return nil
+}
 
 // ReceiveFindNode handle FIND_NODE command.
-func (n *Node) ReceiveFindNode(dst *Node, key *big.Int, l int) {}
+func (n *Node) ReceiveFindNode(src *Node, data []byte) error {
+	// parse FindNode command
+	var cmd FindNode
+	_, err := tl.Parse(&cmd, data, true)
+	if err != nil {
+		return err
+	}
+
+	// TODO: implement receive FIND_NODE mechanism
+	return nil
+}
 
 // ReceiveFindValue handle FIND_VALUE command.
-func (n *Node) ReceiveFindValue(dst *Node, key *big.Int) {}
+func (n *Node) ReceiveFindValue(src *Node, data []byte) error {
+	// parse FindValue command
+	var cmd FindValue
+	_, err := tl.Parse(&cmd, data, true)
+	if err != nil {
+		return err
+	}
+
+	// TODO: implement FIND_VALUE mechanims
+	return nil
+}

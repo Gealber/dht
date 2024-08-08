@@ -1,4 +1,5 @@
-- Parse all allowed query method(PING, FIND_NODE, FIND_VALUE, STORE)
+- [DONE] Parse all allowed query method(PING, FIND_NODE, FIND_VALUE, STORE). To re-check later.
+- Implement availability mechanism when a PONG is received
 - Implement ADNL or integrate existing implementation from tonutils-go
 - Integrate key-value storage, with leveldb, badge or any other option
 - Implement clean up process in node when with a shutdown signal
