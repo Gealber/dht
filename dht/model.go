@@ -43,25 +43,25 @@ type Value struct {
 	Signature []byte         `tl:"bytes"`
 }
 
-// // Store scheme
-// // TL definition: dht.store value:dht.value = dht.Stored
-// type Store struct {
-// 	Value Value `tl:"dht.Value"`
-// }
+// Store scheme
+// TL definition: dht.store value:dht.value = dht.Stored
+type Store struct {
+	Value Value `tl:"dht.Value"`
+}
 
-// // FindNode
-// // TL definition: dht.findNode key:int256 k:int = dht.Nodes;
-// // Object used to asks the node to return k Kademlia-nearest
-// // known nodes (from its Kademlia routing table) to key
-// type FindNode struct {
-// 	Key *big.Int `tl:"int256"`
-// 	K   int      `tl:"int"`
-// }
+// FindNode
+// TL definition: dht.findNode key:int256 k:int = dht.Nodes;
+// Object used to asks the node to return k Kademlia-nearest
+// known nodes (from its Kademlia routing table) to key
+type FindNode struct {
+	Key *big.Int `tl:"int256"`
+	K   int      `tl:"int"`
+}
 
-// type FindValue struct {
-// 	Key *big.Int `tl:"int256"`
-// 	K   int      `tl:"int"`
-// }
+type FindValue struct {
+	Key *big.Int `tl:"int256"`
+	K   int      `tl:"int"`
+}
 
 type PrivateKeyAES struct {
 	Key *big.Int `tl:"int256"`
