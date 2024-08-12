@@ -2,12 +2,22 @@
 
 This todo list will increase and decrease according to the progress. Don't take as definetely list of what to implement.
 
+- [PROGRESS] Write TL parser and serializer in Golang.
+    - [DONE] Simple case of TL serializer, serializing structs with built-in types
+    - Serialize structs with complex types
+    - Parse data byte into struct with simple built-in types
+    - Parse data bytes into struct with complex types.
 - [DONE] Parse all allowed query method(PING, FIND_NODE, FIND_VALUE, STORE). To re-check later.
 - [DONE] Implement availability mechanism when a PONG is received. Needs to make sure buckets are sorted.
     - [DONE] Make sure that routing table buckets are sorted after each update of delays tracker
     - [DONE] Place mutex to avoid race conditions
+- Implement STORE
+- Implement FIND_NODE
+- Implement FIND_VALUE
 - Implement ADNL or integrate existing implementation from tonutils-go
-- Integrate key-value storage, with leveldb, badge or any other option
+    - Handle responses from adnl requests. Current implementation is assuming adnl is async.
+- Integrate key-value storage, just use interface and later on decide which key-value to use.
 - Implement clean up process in node when with a shutdown signal
 - Write during the process unit tests for all components
+- Check which models should be TL boxed
 - Update README file with extensive description

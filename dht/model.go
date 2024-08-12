@@ -6,7 +6,6 @@ import (
 
 // The TL definitions used here can be found in the TON blockchain repository
 // https://github.com/ton-blockchain/ton/blob/master/tl/generate/scheme/ton_api.tl
-// The one used are defined in dht/dht.tl
 
 // Ping scheme
 // TL definition: dht.ping random_id:long = dht.Pong
@@ -61,6 +60,11 @@ type FindNode struct {
 type FindValue struct {
 	Key *big.Int `tl:"int256"`
 	K   int      `tl:"int"`
+}
+
+type ValueResult struct {
+	Value *Value  `tl:"dht.Value"`
+	Nodes []*Node `tl:"dht.Nodes"`
 }
 
 type PrivateKeyAES struct {

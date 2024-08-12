@@ -13,18 +13,19 @@ import (
 	"sync"
 	"time"
 
+	gealberTL "github.com/Gealber/dht/tl"
 	"github.com/xssnick/tonutils-go/tl"
 )
 
 var (
-	PingID      = TLID("dht.ping random_id:long = dht.Pong")
-	PongID      = TLID("dht.pong random_id:long = dht.Pong")
-	StoreID     = TLID("dht.store value:dht.value = dht.Stored")
-	FindNodeID  = TLID("dht.findNode key:int256 k:int = dht.Nodes")
-	FindValueID = TLID("dht.findValue key:int256 k:int = dht.ValueResult")
+	PingID      = gealberTL.SchemeID("dht.ping random_id:long = dht.Pong")
+	PongID      = gealberTL.SchemeID("dht.pong random_id:long = dht.Pong")
+	StoreID     = gealberTL.SchemeID("dht.store value:dht.value = dht.Stored")
+	FindNodeID  = gealberTL.SchemeID("dht.findNode key:int256 k:int = dht.Nodes")
+	FindValueID = gealberTL.SchemeID("dht.findValue key:int256 k:int = dht.ValueResult")
 )
 
-type ADNLMsg struct {
+type adnlMsg struct {
 	src  *Node
 	data []byte
 }
@@ -34,11 +35,11 @@ type adnl interface {
 	// Receive return a channel of data that is assumed to be
 	// a structure serialized with TL, including 4-byte prefix(a boxed scheme)
 	// indicating the scheme ID
-	Receive() <-chan ADNLMsg
+	Receive() <-chan adnlMsg
 }
 
 type storage interface {
-	Get(key *big.Int) ([]byte, error)
+	Get(key *big.Int) ([]byte, bool)
 	Set(key *big.Int, value []byte) error
 }
 
@@ -56,6 +57,15 @@ type nodeDescription struct {
 	lastPingTs int64
 	// delay in seconds of the latest ping response
 	delay int64
+}
+
+func (nd *nodeDescription) ToNode() *Node {
+	return &Node{
+		id:                   nd.id,
+		ip:                   nd.ip,
+		port:                 nd.port,
+		semiPermanentAddress: nd.semiPermanentAddress,
+	}
 }
 
 type Node struct {
@@ -121,7 +131,7 @@ func (n *Node) Run() {
 	}
 }
 
-func (n *Node) handleReceivedCMD(msg ADNLMsg, errChn chan<- error) {
+func (n *Node) handleReceivedCMD(msg adnlMsg, errChn chan<- error) {
 	if len(msg.data) < 4 {
 		return
 	}
@@ -282,7 +292,41 @@ func (n *Node) ReceiveFindValue(src *Node, data []byte) error {
 		return err
 	}
 
-	// TODO: implement FIND_VALUE mechanims
+	// TODO: implement FIND_VALUE mechanism
+	// look find value in our storage
+	value, ok := n.table.Get(cmd.Key)
+	if !ok {
+		// pass request to nearest K nodes
+		nearestNodes := n.selectKNearestNodes(cmd.Key, cmd.K)
+		// send this nodes to src
+		v := ValueResult{
+			Nodes: nearestNodes,
+		}
+
+		// TODO: check if this model should be boxed
+		d, err := tl.Serialize(&v, false)
+		if err != nil {
+			return err
+		}
+
+		go n.adnl.Send(src, d)
+
+		return nil
+	}
+
+	res := ValueResult{
+		Value: &Value{
+			Values: value,
+		},
+	}
+
+	resData, err := tl.Serialize(&res, false)
+	if err != nil {
+		return err
+	}
+
+	n.adnl.Send(src, resData)
+
 	return nil
 }
 
@@ -320,9 +364,6 @@ func (n *Node) findNodeInRouteTable(m *Node) (int, int) {
 	if !ok {
 		d := KademliaDistance(n.id.Key, m.id.Key)
 		idx = DistanceIdx(d)
-		if idx >= 256 {
-			return -1, -1
-		}
 	}
 
 	b := n.routeTable[idx]
@@ -334,4 +375,25 @@ func (n *Node) findNodeInRouteTable(m *Node) (int, int) {
 	})
 
 	return idx, bIdx
+}
+
+// selectKNearestNodes select from known nodes the k nearest nodes
+// to Key
+func (n *Node) selectKNearestNodes(Key *big.Int, k int) []*Node {
+	knownNodes := make([]*Node, 0)
+	for _, b := range n.routeTable {
+		for _, nd := range b {
+			knownNodes = append(knownNodes, nd.ToNode())
+		}
+	}
+
+	// sort nodes according to nearest to Key
+	sort.Slice(knownNodes, func(i, j int) bool {
+		di := KademliaDistance(knownNodes[i].id.Key, Key)
+		dj := KademliaDistance(knownNodes[j].id.Key, Key)
+
+		return di.Cmp(dj) < 0
+	})
+
+	return knownNodes[:k]
 }
