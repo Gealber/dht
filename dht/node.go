@@ -13,15 +13,16 @@ import (
 	"sync"
 	"time"
 
+	gealberTL "github.com/Gealber/dht/tl"
 	"github.com/xssnick/tonutils-go/tl"
 )
 
 var (
-	PingID      = TLID("dht.ping random_id:long = dht.Pong")
-	PongID      = TLID("dht.pong random_id:long = dht.Pong")
-	StoreID     = TLID("dht.store value:dht.value = dht.Stored")
-	FindNodeID  = TLID("dht.findNode key:int256 k:int = dht.Nodes")
-	FindValueID = TLID("dht.findValue key:int256 k:int = dht.ValueResult")
+	PingID      = gealberTL.SchemeID("dht.ping random_id:long = dht.Pong")
+	PongID      = gealberTL.SchemeID("dht.pong random_id:long = dht.Pong")
+	StoreID     = gealberTL.SchemeID("dht.store value:dht.value = dht.Stored")
+	FindNodeID  = gealberTL.SchemeID("dht.findNode key:int256 k:int = dht.Nodes")
+	FindValueID = gealberTL.SchemeID("dht.findValue key:int256 k:int = dht.ValueResult")
 )
 
 type adnlMsg struct {

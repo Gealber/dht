@@ -6,7 +6,6 @@ import (
 
 // The TL definitions used here can be found in the TON blockchain repository
 // https://github.com/ton-blockchain/ton/blob/master/tl/generate/scheme/ton_api.tl
-// The one used are defined in dht/dht.tl
 
 // Ping scheme
 // TL definition: dht.ping random_id:long = dht.Pong
