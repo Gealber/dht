@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
+	"math/big"
 	"reflect"
 	"strings"
 )
@@ -79,7 +80,11 @@ func (t *Serializer) Serialize(obj any, boxed bool) ([]byte, error) {
 	v := reflect.ValueOf(obj)
 	for i := 0; i < st.NumField(); i++ {
 		d, err := serializeField(st, v, i)
-		if err != nil || len(d) == 0 {
+		if err != nil {
+			return nil, err
+		}
+
+		if len(d) == 0 {
 			continue
 		}
 
@@ -130,19 +135,31 @@ func serializeField(st reflect.Type, v reflect.Value, idx int) ([]byte, error) {
 			return ToBytes([]byte(fieldValue.String())), nil
 		}
 	case "int256":
+		var b []byte
 		if fieldKind == reflect.Slice {
-			b := fieldValue.Bytes()
-			if len(b) == 0 {
-				return make([]byte, 32), nil
-			}
-
-			if len(b) != 32 {
-				return nil, errors.New("int256 bytes should be 32 bytes in size")
-			}
-
-			return b, nil
+			// assuming were passed in little endian
+			b = fieldValue.Bytes()
+		} else if v, ok := fieldValue.Interface().(*big.Int); ok {
+			b = v.Bytes()
+		} else {
+			return nil, errors.New("only []byte and *big.Int can be used for int256")
 		}
 
+		if len(b) == 0 {
+			return make([]byte, 32), nil
+		}
+
+		if len(b) < 32 {
+			buff := make([]byte, 32)
+			copy(buff[32-len(b):], b)
+			return buff, nil
+		}
+
+		if len(b) > 32 {
+			return nil, errors.New("int256 bytes should be 32 bytes in size no more than that")
+		}
+
+		return b, nil
 	case "bool":
 		if fieldKind == reflect.Bool {
 			buff := make([]byte, 4)
