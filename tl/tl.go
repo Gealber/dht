@@ -79,7 +79,7 @@ func (t *Serializer) Serialize(obj any, boxed bool) ([]byte, error) {
 	st := reflect.TypeOf(obj)
 	v := reflect.ValueOf(obj)
 	for i := 0; i < st.NumField(); i++ {
-		d, err := serializeField(st, v, i)
+		d, err := t.serializeField(st, v, i)
 		if err != nil {
 			return nil, err
 		}
@@ -94,7 +94,7 @@ func (t *Serializer) Serialize(obj any, boxed bool) ([]byte, error) {
 	return data, nil
 }
 
-func serializeField(st reflect.Type, v reflect.Value, idx int) ([]byte, error) {
+func (t *Serializer) serializeField(st reflect.Type, v reflect.Value, idx int) ([]byte, error) {
 	field := st.Field(idx)
 
 	tagVal := field.Tag.Get("tl")
@@ -171,10 +171,23 @@ func serializeField(st reflect.Type, v reflect.Value, idx int) ([]byte, error) {
 
 			return buff, nil
 		}
-
 	case "bytes":
 		if fieldKind == reflect.Slice {
 			return ToBytes(fieldValue.Bytes()), nil
+		}
+	default:
+		// in case is a custom type, check if is previously registered
+		if tlDef, ok := t.register[field.Type.String()]; ok {
+			combinator, constructor := getCombinator(tlDef), getConstructor(tlDef)
+			if tagVal != combinator && tagVal != constructor {
+				return nil, errors.New("your tag definition doesn't correspond with the combinator or constructor in the registered definition")
+			}
+			// check if is explicit or not, according to
+			// https://docs.ton.org/develop/data-formats/tl#non-obvious-serialization-rules
+			boxed := tagVal == getCombinator(tlDef)
+			return t.Serialize(fieldValue.Interface(), boxed)
+		} else {
+			return nil, errors.New("unregistered custom type as field")
 		}
 	}
 
