@@ -5,8 +5,9 @@ This todo list will increase and decrease according to the progress. Don't take 
 - [PROGRESS] Write TL parser and serializer in Golang.
     - [DONE] Simple case of TL serializer, serializing structs with built-in types
     - [DONE] Serialize structs with complex types
-    - Parse data byte into struct with simple built-in types
+    - [DONE] Parse data byte into struct with simple built-in types
     - Parse data bytes into struct with complex types.
+    - Serialize and parse flags on TL definition(NOT NOW)
 - [DONE] Parse all allowed query method(PING, FIND_NODE, FIND_VALUE, STORE). To re-check later.
 - [DONE] Implement availability mechanism when a PONG is received. Needs to make sure buckets are sorted.
     - [DONE] Make sure that routing table buckets are sorted after each update of delays tracker

@@ -29,9 +29,9 @@ func ToBytes(buf []byte) []byte {
 	return data
 }
 
-func FromBytes(data []byte) (loaded []byte, buffer []byte, err error) {
+func FromBytes(data []byte) ([]byte, error) {
 	if len(data) == 0 {
-		return nil, nil, errors.New("failed to load length, too short data")
+		return nil, errors.New("failed to load length, too short data")
 	}
 
 	offset := 1
@@ -50,17 +50,17 @@ func FromBytes(data []byte) (loaded []byte, buffer []byte, err error) {
 	// if its end, we don't need to align by 4
 	if bufSz >= len(data) {
 		if len(data) < offset+ln {
-			return nil, nil, fmt.Errorf("failed to get payload with len %d, too short data", ln)
+			return nil, fmt.Errorf("failed to get payload with len %d, too short data", ln)
 		}
 		res := make([]byte, ln)
 		copy(res, data[offset:])
-		return res, nil, nil
+		return res, nil
 	}
 
 	if len(data) < bufSz {
-		return nil, nil, errors.New("failed to get payload, too short data")
+		return nil, errors.New("failed to get payload, too short data")
 	}
 	res := make([]byte, ln)
 	copy(res, data[offset:])
-	return res, data[bufSz:], nil
+	return res, nil
 }
