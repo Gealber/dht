@@ -200,46 +200,51 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 }
 
 // Parse data into obj, is assummed obj TL definition was already registered with Register method, and data provided was serialized in the order the TL definition states.
-// TODO: implement optional
-func (t *TLHandler) Parse(data []byte, obj any, boxed bool) error {
+func (t *TLHandler) Parse(data []byte, obj any, boxed bool) (int, error) {
+	amountParsed := 0
 	if len(data) == 0 {
-		return errors.New("empty data")
+		return amountParsed, errors.New("empty data")
 	}
 
 	objV := reflect.ValueOf(obj)
 	if objV.Kind() != reflect.Pointer || objV.IsNil() {
-		return fmt.Errorf("v should be a pointer and not nil")
+		return amountParsed, fmt.Errorf("v should be a pointer and not nil")
 	}
 
+	return t.parse(data, objV, boxed)
+}
+
+// TODO: implement optional and refactor to make it smaller.
+func (t *TLHandler) parse(data []byte, objValue reflect.Value, boxed bool) (int, error) {
+	pos := 0
 	// check if schemeID correspond to one registered
-	registerKey := fmt.Sprintf("%s", reflect.Indirect(objV).Type().String())
+	registerKey := fmt.Sprintf("%s", reflect.Indirect(objValue).Type().String())
 	tlDef, ok := t.register[registerKey]
 	if !ok {
-		return fmt.Errorf("obj %s not registered", reflect.Indirect(objV).Type().String())
+		return pos, fmt.Errorf("obj %s not registered", reflect.Indirect(objValue).Type().String())
 	}
 
 	inOrderTs := extractTypes(tlDef)
-	vt := objV.Elem()
+	vt := objValue.Elem()
 
 	if vt.NumField() != len(inOrderTs) {
-		return errors.New("number of fields in obj differs from types defined in TL definition")
+		return pos, errors.New("number of fields in obj differs from types defined in TL definition")
 	}
 
-	pos := 0
 	if boxed {
 		// parse the 4-bytes scheme id
 		schemeID := data[:4]
 		if hex.EncodeToString(schemeID) != SchemeID(tlDef) {
-			return errors.New("invalid scheme id according to tl definition registered, check if the tl definition is correct")
+			return pos, errors.New("invalid scheme id according to tl definition registered, check if the tl definition is correct")
 		}
 		pos = 4
 	}
 
-	for i, t := range inOrderTs {
+	for i, fieldT := range inOrderTs {
 		fieldValue := vt.Field(i)
 		fieldKind := fieldValue.Kind()
 
-		switch t {
+		switch fieldT {
 		case "int":
 			n := binary.LittleEndian.Uint32(data[pos : pos+4])
 			if fieldKind >= reflect.Int && fieldKind <= reflect.Int64 {
@@ -247,7 +252,7 @@ func (t *TLHandler) Parse(data []byte, obj any, boxed bool) error {
 			} else if fieldKind >= reflect.Uint && fieldKind <= reflect.Uint64 {
 				fieldValue.SetUint(uint64(n))
 			} else {
-				return errors.New("unexpected field type for 'int' TL type")
+				return pos, errors.New("unexpected field type for 'int' TL type")
 			}
 			pos += 4
 		case "long":
@@ -257,19 +262,19 @@ func (t *TLHandler) Parse(data []byte, obj any, boxed bool) error {
 			} else if fieldKind >= reflect.Uint && fieldKind <= reflect.Uint64 {
 				fieldValue.SetUint(uint64(n))
 			} else {
-				return errors.New("unexpected field type for 'int' TL type")
+				return pos, errors.New("unexpected field type for 'int' TL type")
 			}
 			pos += 8
 		case "double":
 			// TODO: to implement
 		case "string":
 			if fieldKind != reflect.String {
-				return errors.New("invalid field type for 'string' TL type")
+				return pos, errors.New("invalid field type for 'string' TL type")
 			}
 
 			val, err := FromBytes(data[pos:])
 			if err != nil {
-				return err
+				return pos, err
 			}
 			fieldValue.SetString(string(val))
 
@@ -297,13 +302,13 @@ func (t *TLHandler) Parse(data []byte, obj any, boxed bool) error {
 			} else if v, ok := fieldValue.Interface().(*big.Int); ok {
 				fieldValue.Set(reflect.ValueOf(v))
 			} else {
-				return errors.New("only []byte and *big.Int can be used for int256")
+				return pos, errors.New("only []byte and *big.Int can be used for int256")
 			}
 
 			pos += 32
 		case "bool":
 			if fieldKind != reflect.Bool {
-				return errors.New("invalid field type for 'bool' TL type")
+				return pos, errors.New("invalid field type for 'bool' TL type")
 			}
 
 			boolTCrc32 := hex.EncodeToString(data[pos : pos+4])
@@ -312,34 +317,58 @@ func (t *TLHandler) Parse(data []byte, obj any, boxed bool) error {
 			} else if boolTCrc32 == BoolFalseHexID {
 				fieldValue.SetBool(false)
 			} else {
-				return errors.New("invalid Crc32 for TL Bool type")
+				return pos, errors.New("invalid Crc32 for TL Bool type")
 			}
 
 			pos += 4
 		case "bytes":
 			if fieldKind != reflect.Slice {
-				return errors.New("invalid field type for 'bytes' TL type")
+				return pos, errors.New("invalid field type for 'bytes' TL type")
 			}
 
 			val, err := FromBytes(data[pos:])
 			if err != nil {
-				return err
+				return pos, err
 			}
 
 			fieldValue.SetBytes(val)
 
 			offset := func() int {
+				var result int
 				if len(val) < 0xFE {
-					return 1
+					result = 1
+				} else {
+					result = 4
+				}
+				round := (len(val) + result) % 4
+
+				if round != 0 {
+					result += 4 - round
 				}
 
-				return 4
+				return result
 			}()
 
 			pos += len(val) + offset
 		default:
+			if tlDef, ok := t.register[fieldValue.String()]; ok {
+				combinator, constructor := getCombinator(tlDef), getConstructor(tlDef)
+				if fieldT != combinator && fieldT != constructor {
+					return pos, errors.New("your tag definition doesn't correspond with the combinator or constructor in the registered definition")
+				}
+				boxed := fieldT == getCombinator(tlDef)
+				// how many of remaining data correspond to this field type
+				objField := reflect.New(fieldValue.Type())
+				consumed, err := t.parse(data[pos:], objField, boxed)
+				if err != nil {
+					return pos, err
+				}
+				pos += consumed
+			} else {
+				return pos, errors.New("unregistered custom type as field")
+			}
 		}
 	}
 
-	return nil
+	return pos, nil
 }
