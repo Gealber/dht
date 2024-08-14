@@ -2,19 +2,21 @@ package tl
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
+	"reflect"
 	"testing"
 )
 
 const (
-	testUserTL        = "testUser intT:int strT:string bigIntT:int256 bigIntBT:int256 doubleT:double boolT:bool bytesT:bytes = TestUser"
-	testComplexUserTL = "testComplexUser intT:int strT:string bigIntT:int256 bigIntBT:int256 doubleT:double boolT:bool bytesT:bytes userData:TestUserData = TestComplexUser"
+	testUserTL        = "testUser intT:int strT:string bigIntT:int256 bigIntBT:int256 boolT:bool bytesT:bytes = TestUser"
+	testComplexUserTL = "testComplexUser intT:int strT:string bigIntT:int256 bigIntBT:int256 boolT:bool bytesT:bytes userData:TestUserData = TestComplexUser"
 	testUserDataTL    = "testUserData name:string lastName:string balance:int lastLogin:long rawData:bytes isBald:bool = TestUserData"
 )
 
 func TestSerialize(t *testing.T) {
-	s := NewSerializer()
+	s := New()
 	tcs := genSerializeTCs()
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -37,6 +39,34 @@ func TestSerialize(t *testing.T) {
 	}
 }
 
+func TestParse(t *testing.T) {
+	s := New()
+	tcs := genParseTCs()
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			if len(tc.depTlDefs) > 0 {
+				s.Register(tc.depTlDefs)
+			}
+
+			// registering tl scheme
+			s.Register([]ModelRegister{tc.tlDef})
+			data, err := hex.DecodeString(tc.dataStr)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = s.Parse(data, &tc.obj, tc.boxed)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if reflect.DeepEqual(tc.obj, tc.expectedObj) {
+				t.Fatal(errors.New("expected object differs from got"))
+			}
+		})
+	}
+}
+
 type serializeTestCase struct {
 	name            string
 	dataStr         string
@@ -45,6 +75,16 @@ type serializeTestCase struct {
 	tlDef           ModelRegister
 	depTlDefs       []ModelRegister
 	expectedDataHex string
+}
+
+type parseTestCase struct {
+	name        string
+	boxed       bool
+	dataStr     string
+	obj         TestUser
+	tlDef       ModelRegister
+	depTlDefs   []ModelRegister
+	expectedObj TestUser
 }
 
 // TL def: testUser intT:int strT:string bigIntT:int256 bigIntBT:int256 doubleT:double boolT:bool bytesT:bytes = TestUser;
@@ -100,7 +140,7 @@ func genSerializeTCs() []serializeTestCase {
 				T:   TestUser{},
 				Def: testUserTL,
 			},
-			expectedDataHex: "e098a0f30100000004486f6c61000000000000000000000000000000000000000000000000000000000000000000271000000000000000000000000000000000000000000000000000000000000003e8b575729904486f6c61000000",
+			expectedDataHex: "e41a611b0100000004486f6c61000000000000000000000000000000000000000000000000000000000000000000271000000000000000000000000000000000000000000000000000000000000003e8b575729904486f6c61000000",
 		},
 		{
 			name: "struct with custom types inside, structs represents a user",
@@ -125,7 +165,33 @@ func genSerializeTCs() []serializeTestCase {
 				},
 			},
 			boxed:           true,
-			expectedDataHex: "5246ea9b0100000004486f6c61000000000000000000000000000000000000000000000000000000000000000000271000000000000000000000000000000000000000000000000000000000000003e8b575729904486f6c61000000fea3b64d000000000000000000000000000000000000000000000000379779bc",
+			expectedDataHex: "ef2149c40100000004486f6c61000000000000000000000000000000000000000000000000000000000000000000271000000000000000000000000000000000000000000000000000000000000003e8b575729904486f6c61000000fea3b64d000000000000000000000000000000000000000000000000379779bc",
+		},
+	}
+}
+
+func genParseTCs() []parseTestCase {
+	buff := make([]byte, 32)
+	return []parseTestCase{
+		{
+			name:    "simple case with built-in types, structs represents a user",
+			dataStr: "e41a611b0100000004486f6c61000000000000000000000000000000000000000000000000000000000000000000271000000000000000000000000000000000000000000000000000000000000003e8b575729904486f6c61000000",
+			obj:     TestUser{},
+			tlDef: ModelRegister{
+				T:   TestUser{},
+				Def: testUserTL,
+			},
+			depTlDefs: []ModelRegister{},
+			expectedObj: TestUser{
+				IntT:     1,
+				StrT:     "Hola",
+				BigIntT:  big.NewInt(10000),
+				BigIntBT: big.NewInt(1000).FillBytes(buff),
+				// DoubleT:  1.0,
+				BoolT:  true,
+				BytesT: []byte("Hola"),
+			},
+			boxed: true,
 		},
 	}
 }

@@ -11,6 +11,11 @@ import (
 	"strings"
 )
 
+var (
+	BoolTrueHexID  = "b5757299"
+	BoolFalseHexID = "379779bc"
+)
+
 // Crc32 given an TL-scheme computes the crc32.
 func Crc32(scheme string) uint32 {
 	scheme = strings.ReplaceAll(scheme, "(", "")
@@ -37,19 +42,19 @@ type ModelRegister struct {
 	Def string
 }
 
-type Serializer struct {
+type TLHandler struct {
 	// map to keep registers of TL definition
 	// <go type %T,full definition> map
 	register map[string]string
 }
 
-func NewSerializer() *Serializer {
-	return &Serializer{
+func New() *TLHandler {
+	return &TLHandler{
 		register: make(map[string]string),
 	}
 }
 
-func (t *Serializer) Register(models []ModelRegister) {
+func (t *TLHandler) Register(models []ModelRegister) {
 	for _, m := range models {
 		t.register[fmt.Sprintf("%T", m.T)] = m.Def
 	}
@@ -58,7 +63,7 @@ func (t *Serializer) Register(models []ModelRegister) {
 // Serialize a struct with `tl` tags defined
 // into it's binary representation. In case boxed is true,
 // obj MUST be previously registered with Register method.
-func (t *Serializer) Serialize(obj any, boxed bool) ([]byte, error) {
+func (t *TLHandler) Serialize(obj any, boxed bool) ([]byte, error) {
 	data := make([]byte, 0)
 	if boxed {
 		def, ok := t.register[fmt.Sprintf("%T", obj)]
@@ -94,7 +99,7 @@ func (t *Serializer) Serialize(obj any, boxed bool) ([]byte, error) {
 	return data, nil
 }
 
-func (t *Serializer) serializeField(st reflect.Type, v reflect.Value, idx int) ([]byte, error) {
+func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([]byte, error) {
 	field := st.Field(idx)
 
 	tagVal := field.Tag.Get("tl")
@@ -192,4 +197,149 @@ func (t *Serializer) serializeField(st reflect.Type, v reflect.Value, idx int) (
 	}
 
 	return nil, errors.New("unsupported serialization check fields 'tl' definition")
+}
+
+// Parse data into obj, is assummed obj TL definition was already registered with Register method, and data provided was serialized in the order the TL definition states.
+// TODO: implement optional
+func (t *TLHandler) Parse(data []byte, obj any, boxed bool) error {
+	if len(data) == 0 {
+		return errors.New("empty data")
+	}
+
+	objV := reflect.ValueOf(obj)
+	if objV.Kind() != reflect.Pointer || objV.IsNil() {
+		return fmt.Errorf("v should be a pointer and not nil")
+	}
+
+	// check if schemeID correspond to one registered
+	registerKey := fmt.Sprintf("%s", reflect.Indirect(objV).Type().String())
+	tlDef, ok := t.register[registerKey]
+	if !ok {
+		return fmt.Errorf("obj %s not registered", reflect.Indirect(objV).Type().String())
+	}
+
+	inOrderTs := extractTypes(tlDef)
+	vt := objV.Elem()
+
+	if vt.NumField() != len(inOrderTs) {
+		return errors.New("number of fields in obj differs from types defined in TL definition")
+	}
+
+	pos := 0
+	if boxed {
+		// parse the 4-bytes scheme id
+		schemeID := data[:4]
+		if hex.EncodeToString(schemeID) != SchemeID(tlDef) {
+			return errors.New("invalid scheme id according to tl definition registered, check if the tl definition is correct")
+		}
+		pos = 4
+	}
+
+	for i, t := range inOrderTs {
+		fieldValue := vt.Field(i)
+		fieldKind := fieldValue.Kind()
+
+		switch t {
+		case "int":
+			n := binary.LittleEndian.Uint32(data[pos : pos+4])
+			if fieldKind >= reflect.Int && fieldKind <= reflect.Int64 {
+				fieldValue.SetInt(int64(n))
+			} else if fieldKind >= reflect.Uint && fieldKind <= reflect.Uint64 {
+				fieldValue.SetUint(uint64(n))
+			} else {
+				return errors.New("unexpected field type for 'int' TL type")
+			}
+			pos += 4
+		case "long":
+			n := binary.LittleEndian.Uint32(data[pos : pos+8])
+			if fieldKind >= reflect.Int && fieldKind <= reflect.Int64 {
+				fieldValue.SetInt(int64(n))
+			} else if fieldKind >= reflect.Uint && fieldKind <= reflect.Uint64 {
+				fieldValue.SetUint(uint64(n))
+			} else {
+				return errors.New("unexpected field type for 'int' TL type")
+			}
+			pos += 8
+		case "double":
+			// TODO: to implement
+		case "string":
+			if fieldKind != reflect.String {
+				return errors.New("invalid field type for 'string' TL type")
+			}
+
+			val, err := FromBytes(data[pos:])
+			if err != nil {
+				return err
+			}
+			fieldValue.SetString(string(val))
+
+			offset := func() int {
+				var result int
+				if len(val) < 0xFE {
+					result = 1
+				} else {
+					result = 4
+				}
+				round := (len(val) + result) % 4
+
+				if round != 0 {
+					result += 4 - round
+				}
+
+				return result
+			}()
+
+			pos += len(val) + offset
+		case "int256":
+			b := data[pos : pos+32]
+			if fieldKind == reflect.Slice {
+				fieldValue.SetBytes(b)
+			} else if v, ok := fieldValue.Interface().(*big.Int); ok {
+				fieldValue.Set(reflect.ValueOf(v))
+			} else {
+				return errors.New("only []byte and *big.Int can be used for int256")
+			}
+
+			pos += 32
+		case "bool":
+			if fieldKind != reflect.Bool {
+				return errors.New("invalid field type for 'bool' TL type")
+			}
+
+			boolTCrc32 := hex.EncodeToString(data[pos : pos+4])
+			if boolTCrc32 == BoolTrueHexID {
+				fieldValue.SetBool(true)
+			} else if boolTCrc32 == BoolFalseHexID {
+				fieldValue.SetBool(false)
+			} else {
+				return errors.New("invalid Crc32 for TL Bool type")
+			}
+
+			pos += 4
+		case "bytes":
+			if fieldKind != reflect.Slice {
+				return errors.New("invalid field type for 'bytes' TL type")
+			}
+
+			val, err := FromBytes(data[pos:])
+			if err != nil {
+				return err
+			}
+
+			fieldValue.SetBytes(val)
+
+			offset := func() int {
+				if len(val) < 0xFE {
+					return 1
+				}
+
+				return 4
+			}()
+
+			pos += len(val) + offset
+		default:
+		}
+	}
+
+	return nil
 }
