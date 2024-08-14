@@ -55,13 +55,49 @@ func TestParse(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			err = s.Parse(data, &tc.obj, tc.boxed)
+			n, err := s.Parse(data, &tc.obj, tc.boxed)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			if reflect.DeepEqual(tc.obj, tc.expectedObj) {
 				t.Fatal(errors.New("expected object differs from got"))
+			}
+
+			if len(data) != n {
+				t.Fatalf("length data and data consumed differs: want: %d got: %d", len(data), n)
+			}
+		})
+	}
+}
+
+func TestNesstedParse(t *testing.T) {
+	s := New()
+	tcs := genNestedParseTCs()
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			if len(tc.depTlDefs) > 0 {
+				s.Register(tc.depTlDefs)
+			}
+
+			// registering tl scheme
+			s.Register([]ModelRegister{tc.tlDef})
+			data, err := hex.DecodeString(tc.dataStr)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			n, err := s.Parse(data, &tc.obj, tc.boxed)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if reflect.DeepEqual(tc.obj, tc.expectedObj) {
+				t.Fatal(errors.New("expected object differs from got"))
+			}
+
+			if len(data) != n {
+				t.Fatalf("length data and data consumed differs: want: %d got: %d", len(data), n)
 			}
 		})
 	}
@@ -77,7 +113,7 @@ type serializeTestCase struct {
 	expectedDataHex string
 }
 
-type parseTestCase struct {
+type parseSimpleTestCase struct {
 	name        string
 	boxed       bool
 	dataStr     string
@@ -85,6 +121,16 @@ type parseTestCase struct {
 	tlDef       ModelRegister
 	depTlDefs   []ModelRegister
 	expectedObj TestUser
+}
+
+type parseComplexTestCase struct {
+	name        string
+	boxed       bool
+	dataStr     string
+	obj         TestComplexUser
+	tlDef       ModelRegister
+	depTlDefs   []ModelRegister
+	expectedObj TestComplexUser
 }
 
 // TL def: testUser intT:int strT:string bigIntT:int256 bigIntBT:int256 doubleT:double boolT:bool bytesT:bytes = TestUser;
@@ -170,9 +216,9 @@ func genSerializeTCs() []serializeTestCase {
 	}
 }
 
-func genParseTCs() []parseTestCase {
+func genParseTCs() []parseSimpleTestCase {
 	buff := make([]byte, 32)
-	return []parseTestCase{
+	return []parseSimpleTestCase{
 		{
 			name:    "simple case with built-in types, structs represents a user",
 			dataStr: "e41a611b0100000004486f6c61000000000000000000000000000000000000000000000000000000000000000000271000000000000000000000000000000000000000000000000000000000000003e8b575729904486f6c61000000",
@@ -194,4 +240,37 @@ func genParseTCs() []parseTestCase {
 			boxed: true,
 		},
 	}
+}
+
+func genNestedParseTCs() []parseComplexTestCase {
+	buff := make([]byte, 32)
+	return []parseComplexTestCase{
+		{
+			name:    "struct with custom types inside, structs represents a user",
+			dataStr: "ef2149c40100000004486f6c61000000000000000000000000000000000000000000000000000000000000000000271000000000000000000000000000000000000000000000000000000000000003e8b575729904486f6c61000000fea3b64d000000000000000000000000000000000000000000000000379779bc",
+			obj:     TestComplexUser{},
+			tlDef: ModelRegister{
+				T:   TestComplexUser{},
+				Def: testComplexUserTL,
+			},
+			depTlDefs: []ModelRegister{
+				{
+					T:   TestUserData{},
+					Def: testUserDataTL,
+				},
+			},
+			expectedObj: TestComplexUser{
+				IntT:     1,
+				StrT:     "Hola",
+				BigIntT:  big.NewInt(10000),
+				BigIntBT: big.NewInt(1000).FillBytes(buff),
+				// DoubleT:  1.0,
+				BoolT:    true,
+				BytesT:   []byte("Hola"),
+				UserData: TestUserData{},
+			},
+			boxed: true,
+		},
+	}
+
 }
