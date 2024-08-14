@@ -351,7 +351,7 @@ func (t *TLHandler) parse(data []byte, objValue reflect.Value, boxed bool) (int,
 
 			pos += len(val) + offset
 		default:
-			if tlDef, ok := t.register[fieldValue.String()]; ok {
+			if tlDef, ok := t.register[fieldValue.Type().String()]; ok {
 				combinator, constructor := getCombinator(tlDef), getConstructor(tlDef)
 				if fieldT != combinator && fieldT != constructor {
 					return pos, errors.New("your tag definition doesn't correspond with the combinator or constructor in the registered definition")
