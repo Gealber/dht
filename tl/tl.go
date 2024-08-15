@@ -8,6 +8,7 @@ import (
 	"hash/crc32"
 	"math/big"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -46,6 +47,8 @@ type TLHandler struct {
 	// map to keep registers of TL definition
 	// <go type %T,full definition> map
 	register map[string]string
+	// flagsRegister keeps track of flags set on models
+	flagsRegister map[string]int
 }
 
 func New() *TLHandler {
@@ -110,7 +113,54 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 	fieldKind := v.Field(idx).Kind()
 	fieldValue := v.Field(idx)
 
+	if tagVal[0] == '?' {
+		if len(tagVal) <= 2 {
+			return nil, errors.New("'?' should be followed by bit position and type")
+		}
+
+		spaceIdx := strings.Index(tagVal, " ")
+		if spaceIdx == -1 {
+			return nil, errors.New("'?' definition should be separated by space, for example '?0 int'")
+		}
+
+		bitPos, err := strconv.Atoi(tagVal[1:spaceIdx])
+		if err != nil {
+			return nil, err
+		}
+
+		// 'flags' is a 32-bit integer
+		if bitPos < 0 || bitPos > 31 {
+			return nil, errors.New("invalid bit position for '?' definition")
+		}
+
+		// check if this bit in flag is set
+		flags, ok := t.flagsRegister[field.Type.String()]
+		if !ok {
+			return nil, errors.New("'flags' should be previously defined")
+		}
+
+		if flags&(1<<bitPos) == 0 {
+			return nil, nil
+		}
+
+		// make part after ' ' space the tagVal
+		if len(tagVal)-1 == spaceIdx {
+			return nil, errors.New("tag value cannot end with space")
+		}
+
+		tagVal = tagVal[spaceIdx+1:]
+	}
+
 	switch tagVal {
+	case "flags":
+		buff := make([]byte, 4)
+		if fieldKind >= reflect.Int && fieldKind <= reflect.Int64 {
+			binary.LittleEndian.PutUint32(buff, uint32(fieldValue.Int()))
+		} else if fieldKind >= reflect.Uint && fieldKind <= reflect.Uint64 {
+			binary.LittleEndian.PutUint32(buff, uint32(fieldValue.Uint()))
+		} else {
+			return nil, errors.New("invalid field type for 'flags'")
+		}
 	case "int":
 		buff := make([]byte, 4)
 		if fieldKind >= reflect.Int && fieldKind <= reflect.Int64 {
@@ -118,7 +168,7 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 		} else if fieldKind >= reflect.Uint && fieldKind <= reflect.Uint64 {
 			binary.LittleEndian.PutUint32(buff, uint32(fieldValue.Uint()))
 		} else {
-			return nil, nil
+			return nil, errors.New("invalid field type for TL type 'int'")
 		}
 
 		return buff, nil
@@ -129,7 +179,7 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 		} else if fieldKind >= reflect.Uint && fieldKind <= reflect.Uint64 {
 			binary.LittleEndian.PutUint32(buff, uint32(fieldValue.Uint()))
 		} else {
-			return nil, nil
+			return nil, errors.New("invalid field type for TL type 'long'")
 		}
 
 		return buff, nil
@@ -138,6 +188,8 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 	case "string":
 		if fieldKind == reflect.String {
 			return ToBytes([]byte(fieldValue.String())), nil
+		} else {
+			return nil, errors.New("invalid field type for TL type 'string'")
 		}
 	case "int256":
 		var b []byte
@@ -175,10 +227,14 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 			}
 
 			return buff, nil
+		} else {
+			return nil, errors.New("invalid field type for TL type 'bool'")
 		}
 	case "bytes":
 		if fieldKind == reflect.Slice {
 			return ToBytes(fieldValue.Bytes()), nil
+		} else {
+			return nil, errors.New("invalid field type for TL type 'bytes'")
 		}
 	default:
 		// in case is a custom type, check if is previously registered

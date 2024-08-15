@@ -7,7 +7,8 @@ This todo list will increase and decrease according to the progress. Don't take 
     - [DONE] Serialize structs with complex types
     - [DONE] Parse data byte into struct with simple built-in types
     - [DONE] Parse data bytes into struct with complex types.
-    - Serialize and parse flags on TL definition(NOT NOW)
+    - [DONE] Serialize flags on TL definition
+    - Handle 'vector' TL type
 - [DONE] Parse all allowed query method(PING, FIND_NODE, FIND_VALUE, STORE). To re-check later.
 - [DONE] Implement availability mechanism when a PONG is received. Needs to make sure buckets are sorted.
     - [DONE] Make sure that routing table buckets are sorted after each update of delays tracker
