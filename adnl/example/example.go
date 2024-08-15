@@ -11,7 +11,7 @@ import (
 
 	"github.com/Gealber/dht/adnl"
 	"github.com/Gealber/dht/config"
-	"github.com/xssnick/tonutils-go/tl"
+	"github.com/Gealber/dht/tl"
 )
 
 func main() {
@@ -54,7 +54,9 @@ func main() {
 		Date: time.Now().Unix(),
 	}
 
-	createChannelData, err := tl.Serialize(&msgCreateChannel, true)
+	tlHandler := tl.New()
+
+	createChannelData, err := tlHandler.Serialize(msgCreateChannel, true)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -72,7 +74,7 @@ func main() {
 	// serialize GetSignedAddressList
 	var addrList adnl.GetSignedAddressList
 
-	query, err := tl.Serialize(&addrList, true)
+	query, err := tlHandler.Serialize(addrList, true)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,7 +87,7 @@ func main() {
 		Query:   query,
 	}
 
-	msgQueryData, err := tl.Serialize(&adnlQuery, true)
+	msgQueryData, err := tlHandler.Serialize(adnlQuery, true)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -123,7 +125,7 @@ func main() {
 		Rand2:               r2,
 	}
 
-	pktData, err := tl.Serialize(&packet, true)
+	pktData, err := tlHandler.Serialize(packet, true)
 	if err != nil {
 		log.Fatal(err)
 	}
