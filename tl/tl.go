@@ -53,7 +53,8 @@ type TLHandler struct {
 
 func New() *TLHandler {
 	return &TLHandler{
-		register: make(map[string]string),
+		register:      make(map[string]string),
+		flagsRegister: make(map[string]int),
 	}
 }
 
@@ -113,6 +114,20 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 	fieldKind := v.Field(idx).Kind()
 	fieldValue := v.Field(idx)
 
+	if tagVal == "flags" {
+		buff := make([]byte, 4)
+		if fieldKind >= reflect.Int && fieldKind <= reflect.Int64 {
+			binary.LittleEndian.PutUint32(buff, uint32(fieldValue.Int()))
+		} else if fieldKind >= reflect.Uint && fieldKind <= reflect.Uint64 {
+			binary.LittleEndian.PutUint32(buff, uint32(fieldValue.Uint()))
+		} else {
+			return nil, errors.New("invalid field type for 'flags'")
+		}
+
+		t.flagsRegister[st.String()] = int(fieldValue.Int())
+		return buff, nil
+	}
+
 	if tagVal[0] == '?' {
 		if len(tagVal) <= 2 {
 			return nil, errors.New("'?' should be followed by bit position and type")
@@ -134,11 +149,12 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 		}
 
 		// check if this bit in flag is set
-		flags, ok := t.flagsRegister[field.Type.String()]
+		flags, ok := t.flagsRegister[st.String()]
 		if !ok {
 			return nil, errors.New("'flags' should be previously defined")
 		}
 
+		// if bit in bitPos is not set in flags value, we don't process this field
 		if flags&(1<<bitPos) == 0 {
 			return nil, nil
 		}
@@ -151,16 +167,52 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 		tagVal = tagVal[spaceIdx+1:]
 	}
 
-	switch tagVal {
-	case "flags":
-		buff := make([]byte, 4)
-		if fieldKind >= reflect.Int && fieldKind <= reflect.Int64 {
-			binary.LittleEndian.PutUint32(buff, uint32(fieldValue.Int()))
-		} else if fieldKind >= reflect.Uint && fieldKind <= reflect.Uint64 {
-			binary.LittleEndian.PutUint32(buff, uint32(fieldValue.Uint()))
-		} else {
-			return nil, errors.New("invalid field type for 'flags'")
+	if strings.HasPrefix(tagVal, "vector") {
+		// parse second part of tagVal expected to be 'vector T'
+		spaceIdx := strings.Index(tagVal, " ")
+		if spaceIdx == -1 {
+			return nil, errors.New("'vector' definition should be followed by space and TL type, for example 'vector int'")
 		}
+
+		// check the fieldKind is slice
+		if fieldKind != reflect.Slice {
+			return nil, errors.New("'vector' definition should be a slice")
+		}
+
+		// make part after ' ' space the tagVal
+		if len(tagVal)-1 == spaceIdx {
+			return nil, errors.New("tag value cannot end with space")
+		}
+
+		tagVal = tagVal[spaceIdx+1:]
+		buff := make([]byte, 0)
+
+		// setting size of slice first
+		tmp := make([]byte, 4)
+		binary.LittleEndian.PutUint32(tmp, uint32(fieldValue.Len()))
+		buff = append(buff, tmp...)
+
+		// iterate over elements in slice and
+		size := fieldValue.Len()
+		for i := 0; i < size; i++ {
+			fIdx := fieldValue.Index(i)
+			// parse element
+			subBuff, err := t.serializeBuiltIn(fIdx.Kind(), fIdx, tagVal)
+			if err != nil {
+				return nil, err
+			}
+
+			buff = append(buff, subBuff...)
+		}
+
+		return buff, nil
+	}
+
+	return t.serializeBuiltIn(fieldKind, fieldValue, tagVal)
+}
+
+func (t *TLHandler) serializeBuiltIn(fieldKind reflect.Kind, fieldValue reflect.Value, tagVal string) ([]byte, error) {
+	switch tagVal {
 	case "int":
 		buff := make([]byte, 4)
 		if fieldKind >= reflect.Int && fieldKind <= reflect.Int64 {
@@ -183,8 +235,8 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 		}
 
 		return buff, nil
-	case "double":
-		// TODO: to implement double
+	// case "double":
+	// TODO: to implement double
 	case "string":
 		if fieldKind == reflect.String {
 			return ToBytes([]byte(fieldValue.String())), nil
@@ -237,8 +289,16 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 			return nil, errors.New("invalid field type for TL type 'bytes'")
 		}
 	default:
+		if fieldKind == reflect.Interface && !fieldValue.IsNil() {
+			// try to check the underlaying type of it
+			fV := fieldValue.Elem()
+			fK := fV.Kind()
+
+			return t.serializeBuiltIn(fK, fV, tagVal)
+		}
+
 		// in case is a custom type, check if is previously registered
-		if tlDef, ok := t.register[field.Type.String()]; ok {
+		if tlDef, ok := t.register[fieldValue.Type().String()]; ok {
 			combinator, constructor := getCombinator(tlDef), getConstructor(tlDef)
 			if tagVal != combinator && tagVal != constructor {
 				return nil, errors.New("your tag definition doesn't correspond with the combinator or constructor in the registered definition")
@@ -251,8 +311,6 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 			return nil, errors.New("unregistered custom type as field")
 		}
 	}
-
-	return nil, errors.New("unsupported serialization check fields 'tl' definition")
 }
 
 // Parse data into obj, is assummed obj TL definition was already registered with Register method, and data provided was serialized in the order the TL definition states.
