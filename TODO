@@ -10,6 +10,7 @@ This todo list will increase and decrease according to the progress. Don't take 
     - [DONE] Serialize flags on TL definition
     - [DONE] Handle 'vector' TL type for serialization
     - Handle 'vector' and flags cases for parsing(On hold untils will be needed)
+    - Refactor both serializer and parser, methods are too long
 - [DONE] Parse all allowed query method(PING, FIND_NODE, FIND_VALUE, STORE). To re-check later.
 - [DONE] Implement availability mechanism when a PONG is received. Needs to make sure buckets are sorted.
     - [DONE] Make sure that routing table buckets are sorted after each update of delays tracker
