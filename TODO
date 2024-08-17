@@ -15,7 +15,7 @@ This todo list will increase and decrease according to the progress. Don't take 
     - Refactor both serializer and parser, methods are too long
 - ADNL
     - Implement ADNL or integrate existing implementation from tonutils-go
-    - Implement AES-CTR cipher
+    - [DONE] Implement AES-CTR cipher
     - Handle responses from adnl requests. Current implementation is assuming adnl is async.
 - DHT methods
     - [DONE] Implement availability mechanism when a PONG is received. Needs to make sure buckets are sorted.
