@@ -7,7 +7,9 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/Gealber/dht/adnl"
 	"github.com/Gealber/dht/config"
 	"github.com/Gealber/dht/tl"
+	"github.com/Gealber/dht/utils"
 )
 
 func main() {
@@ -23,15 +26,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	tlHandler := tl.New()
-
 	node := cfg.Dht.StaticNodes.Nodes[0]
 
 	ipDec := node.AddrList.Addrs[0].IP
 	port := node.AddrList.Addrs[0].Port
 	key := node.ID.Key
 
-	dhtNodeKey, err := base64.RawStdEncoding.DecodeString(key)
+	dhtNodeKey, err := base64.StdEncoding.DecodeString(key)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -47,10 +48,59 @@ func main() {
 	}
 	defer conn.Close()
 
+	// run read loop in background, buffer read size 4KB
+	done := make(chan struct{})
+	buff := make([]byte, 4096)
+	go func() {
+		for {
+			n, err := conn.Read(buff)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return
+				}
+
+				log.Println("ERROR WHILE READING: ", err)
+			}
+
+			log.Println(hex.EncodeToString(buff[:n]))
+		}
+	}()
+
+	payload, err := buildExamplePayload(dhtNodeKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// ignores for the sake of the example the amount of data written
+	_, err = conn.Write(payload)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// wait for 5 secs before shutting down
+	ticker := time.NewTicker(5 * time.Second)
+	<-ticker.C
+	done <- struct{}{}
+}
+
+func buildExamplePayload(dhtNodeKey []byte) ([]byte, error) {
+	tlHandler := tl.New()
+
+	models := []tl.ModelRegister{
+		{T: adnl.PacketContent{}, Def: adnl.TLPacketContents},
+		{T: adnl.CreateChannel{}, Def: adnl.TLCreateChannel},
+		{T: adnl.GetSignedAddressList{}, Def: adnl.TLSignedAddressList},
+		{T: adnl.PublicKeyED25519{}, Def: adnl.TLPublicKeyEd25519},
+		{T: adnl.Query{}, Def: adnl.TLMessageQuery},
+		{T: adnl.UDP{}, Def: adnl.TLAddressUDP},
+		{T: adnl.List{}, Def: adnl.TLAddressList},
+	}
+	tlHandler.Register(models)
+
 	// adnl.message.createChannel key:int256 date:int = adnl.Message;
 	channelKey, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	date := time.Now().Unix()
@@ -64,7 +114,7 @@ func main() {
 
 	query, err := tlHandler.Serialize(adnl.GetSignedAddressList{}, true)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	fmt.Println("GET SIGNED ADDRESS LIST QUERY: ", hex.EncodeToString(query))
@@ -76,7 +126,7 @@ func main() {
 
 	ourPub, ourPk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	buff := make([]byte, 30)
@@ -108,19 +158,9 @@ func main() {
 		Rand2:               rand2,
 	}
 
-	models := []tl.ModelRegister{
-		{T: adnl.CreateChannel{}, Def: adnl.TLCreateChannel},
-		{T: adnl.GetSignedAddressList{}, Def: adnl.TLSignedAddressList},
-		{T: adnl.PublicKeyED25519{}, Def: adnl.TLPublicKeyEd25519},
-		{T: adnl.Query{}, Def: adnl.TLMessageQuery},
-		{T: adnl.UDP{}, Def: adnl.TLAddressUDP},
-		{T: adnl.List{}, Def: adnl.TLAddressList},
-	}
-	tlHandler.Register(models)
-
 	data, err := tlHandler.Serialize(pkt, true)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	pkt.Signature = ed25519.Sign(ourPk, data)
@@ -130,9 +170,35 @@ func main() {
 
 	data, err = tlHandler.Serialize(pkt, true)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	h := sha256.Sum256(data)
 
+	sharedKey, err := utils.GenerateSharedKey(ourPk, dhtNodeKey)
+	if err != nil {
+		return nil, err
+	}
+
+	sharedCipher, err := utils.BuildSharedCipher(sharedKey, h[:])
+	if err != nil {
+		return nil, err
+	}
+
+	sharedCipher.XORKeyStream(data, data)
+
+	keyID, err := utils.KeyIDEd25519(dhtNodeKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// | SERVER KEY ID | OUR PUB KEY | SHA256 CONTENT HASH BEFORE ENCRYPTION | ENCRYPTED CONTENT OF THE PACKET |
+	payload := make([]byte, len(keyID)+len(ourPub)+len(h)+len(data))
+	copy(payload, keyID)
+	copy(payload[len(keyID):], ourPub)
+	copy(payload[len(keyID)+len(ourPub):], ourPub)
+	copy(payload[len(keyID)+len(ourPub)+len(h):], h[:])
+	copy(payload[len(keyID)+len(ourPub)+len(h)+len(data):], data)
+
+	return payload, nil
 }

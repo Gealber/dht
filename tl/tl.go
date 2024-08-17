@@ -72,7 +72,7 @@ func (t *TLHandler) Serialize(obj any, boxed bool) ([]byte, error) {
 	if boxed {
 		def, ok := t.register[fmt.Sprintf("%T", obj)]
 		if !ok {
-			return nil, errors.New("model needs to be previously registered if boxed is true")
+			return nil, fmt.Errorf("model needs to be previously registered if boxed is true: %T", obj)
 		}
 
 		// append scheme id in data
@@ -118,13 +118,14 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 		buff := make([]byte, 4)
 		if fieldKind >= reflect.Int && fieldKind <= reflect.Int64 {
 			binary.LittleEndian.PutUint32(buff, uint32(fieldValue.Int()))
+			t.flagsRegister[st.String()] = int(fieldValue.Int())
 		} else if fieldKind >= reflect.Uint && fieldKind <= reflect.Uint64 {
 			binary.LittleEndian.PutUint32(buff, uint32(fieldValue.Uint()))
+			t.flagsRegister[st.String()] = int(fieldValue.Uint())
 		} else {
 			return nil, errors.New("invalid field type for 'flags'")
 		}
 
-		t.flagsRegister[st.String()] = int(fieldValue.Int())
 		return buff, nil
 	}
 
