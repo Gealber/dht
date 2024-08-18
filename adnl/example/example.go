@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -47,20 +48,22 @@ func main() {
 		log.Fatal(err)
 	}
 	defer conn.Close()
+	// setting a timeout for reads
+	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 
 	// run read loop in background, buffer read size 4KB
-	done := make(chan struct{})
 	buff := make([]byte, 4096)
 	go func() {
 		for {
 			log.Println("Reading data...")
 			n, err := conn.Read(buff)
 			if err != nil {
-				if errors.Is(err, io.EOF) {
+				if errors.Is(err, io.EOF) || err.Error() == "i/o timeout" {
 					return
 				}
 
 				log.Println("ERROR WHILE READING: ", err)
+				return
 			}
 
 			log.Println(hex.EncodeToString(buff[:n]))
@@ -79,9 +82,11 @@ func main() {
 	}
 
 	// wait for 5 secs before shutting down
-	ticker := time.NewTicker(5 * time.Second)
-	<-ticker.C
-	done <- struct{}{}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	select {
+	case <-ctx.Done():
+	}
 }
 
 func buildExamplePayload(dhtNodeKey []byte) ([]byte, error) {
@@ -117,8 +122,6 @@ func buildExamplePayload(dhtNodeKey []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println("GET SIGNED ADDRESS LIST QUERY: ", hex.EncodeToString(query))
 
 	msgQuery := adnl.Query{
 		QueryID: queryID,
@@ -193,13 +196,15 @@ func buildExamplePayload(dhtNodeKey []byte) ([]byte, error) {
 		return nil, err
 	}
 
+	log.Println("DATA ENCRYPTED LENGTH: ", len(data))
+	pLen := len(keyID) + len(ourPub) + len(h) + len(data)
+	log.Println("PAYLOAD LENGTH: ", pLen)
 	// | SERVER KEY ID | OUR PUB KEY | SHA256 CONTENT HASH BEFORE ENCRYPTION | ENCRYPTED CONTENT OF THE PACKET |
-	payload := make([]byte, len(keyID)+len(ourPub)+len(h)+len(data))
+	payload := make([]byte, pLen)
 	copy(payload, keyID)
-	copy(payload[len(keyID):], ourPub)
-	copy(payload[len(keyID)+len(ourPub):], ourPub)
-	copy(payload[len(keyID)+len(ourPub)+len(h):], h[:])
-	copy(payload[len(keyID)+len(ourPub)+len(h)+len(data):], data)
+	copy(payload[32:], ourPub)
+	copy(payload[64:], h[:])
+	copy(payload[96:], data)
 
 	return payload, nil
 }
