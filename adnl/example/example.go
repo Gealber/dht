@@ -53,6 +53,7 @@ func main() {
 	buff := make([]byte, 4096)
 	go func() {
 		for {
+			log.Println("Reading data...")
 			n, err := conn.Read(buff)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
