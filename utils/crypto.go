@@ -5,39 +5,12 @@ import (
 	"crypto/cipher"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"crypto/sha512"
 	"errors"
 
+	"filippo.io/edwards25519"
 	"golang.org/x/crypto/curve25519"
 )
-
-// Convert Ed25519 private key to X25519 private key
-func ed25519PrivateKeyToX25519(ed25519Priv ed25519.PrivateKey) []byte {
-	var x25519Priv [32]byte
-	copy(x25519Priv[:], ed25519Priv.Seed())
-	return x25519Priv[:]
-}
-
-// Convert Ed25519 public key to X25519 public key
-func ed25519PublicKeyToX25519(ed25519Pub ed25519.PublicKey) ([]byte, error) {
-	return curve25519.X25519(ed25519Pub[:], curve25519.Basepoint)
-}
-
-func GenerateSharedKey(ourPk ed25519.PrivateKey, serverPb ed25519.PublicKey) ([]byte, error) {
-	// Convert Ed25519 keys to X25519 keys
-	ourX25519Priv := ed25519PrivateKeyToX25519(ourPk)
-	serverX25519Pub, err := ed25519PublicKeyToX25519(serverPb)
-	if err != nil {
-		return nil, err
-	}
-
-	// Generate shared secret
-	sharedSecret, err := curve25519.X25519(ourX25519Priv, serverX25519Pub)
-	if err != nil {
-		return nil, err
-	}
-
-	return sharedSecret, nil
-}
 
 func KeyIDEd25519(key []byte) ([]byte, error) {
 	if len(key) != 32 {
@@ -84,4 +57,42 @@ func NewCipherCtr(key, iv []byte) (cipher.Stream, error) {
 	}
 
 	return cipher.NewCTR(c, iv), nil
+}
+
+func GenerateSharedKey(ourPk ed25519.PrivateKey, serverPb ed25519.PublicKey) ([]byte, error) {
+	pkPriv := ed25519.PrivateKey(ourPk)
+	xPriv := ed25519PrivateKeyToCurve25519(pkPriv)
+
+	xPub, err := ed25519PublicKeyToCurve25519(serverPb)
+	if err != nil {
+		return nil, err
+	}
+
+	secret, err := curve25519.X25519(xPriv, xPub)
+	if err != nil {
+		return nil, err
+	}
+
+	return secret, nil
+}
+
+// ed25519PrivateKeyToCurve25519 converts a ed25519 private key in X25519 equivalent
+// source: https://github.com/FiloSottile/age/blob/980763a16e30ea5c285c271344d2202fcb18c33b/agessh/agessh.go#L287
+func ed25519PrivateKeyToCurve25519(pk ed25519.PrivateKey) []byte {
+	h := sha512.New()
+	h.Write(pk.Seed())
+	out := h.Sum(nil)
+	return out[:curve25519.ScalarSize]
+}
+
+// ed25519PublicKeyToCurve25519 converts a ed25519 public key in X25519 equivalent
+// source: https://github.com/FiloSottile/age/blob/main/agessh/agessh.go#L190
+func ed25519PublicKeyToCurve25519(pk ed25519.PublicKey) ([]byte, error) {
+	// See https://blog.filippo.io/using-ed25519-keys-for-encryption and
+	// https://pkg.go.dev/filippo.io/edwards25519#Point.BytesMontgomery.
+	p, err := new(edwards25519.Point).SetBytes(pk)
+	if err != nil {
+		return nil, err
+	}
+	return p.BytesMontgomery(), nil
 }
