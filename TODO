@@ -14,6 +14,7 @@ This todo list will increase and decrease according to the progress. Don't take 
     - Handle 'vector' and flags cases for parsing(On hold untils will be needed)
     - Refactor both serializer and parser, methods are too long
 - ADNL
+    - [IN PROGRESS] Make ADNL on UDP example works.
     - Implement ADNL or integrate existing implementation from tonutils-go
     - [DONE] Implement AES-CTR cipher
     - Handle responses from adnl requests. Current implementation is assuming adnl is async.
