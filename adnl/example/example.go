@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/Gealber/dht/adnl"
@@ -58,7 +59,7 @@ func main() {
 			log.Println("Reading data...")
 			n, err := conn.Read(buff)
 			if err != nil {
-				if errors.Is(err, io.EOF) || err.Error() == "i/o timeout" {
+				if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "i/o timeout") {
 					return
 				}
 
