@@ -41,10 +41,11 @@ func main() {
 
 	// convert decimal ip to normal ip formatting
 	ip := make(net.IP, 4)
-	binary.LittleEndian.PutUint32(ip, uint32(ipDec))
+	binary.BigEndian.PutUint32(ip, uint32(ipDec))
+	log.Println("IP: ", ip.String())
 
 	// shout to this IP and PORT using UDP
-	conn, err := net.Dial("udp", fmt.Sprintf("%s:%d", ip.String(), port))
+	conn, err := net.Dial("udp", fmt.Sprintf("%s:%d", ip.String(), int32(port)))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -77,10 +78,12 @@ func main() {
 	}
 
 	// ignores for the sake of the example the amount of data written
-	_, err = conn.Write(payload)
+	written, err := conn.Write(payload)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	log.Println("WRITTEN AMOUNT OF BYTES: ", written, "from: ", len(payload))
 
 	// wait for 5 secs before shutting down
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
