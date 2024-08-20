@@ -198,7 +198,7 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 		for i := 0; i < size; i++ {
 			fIdx := fieldValue.Index(i)
 			// parse element
-			subBuff, err := t.serializeBuiltIn(fIdx.Kind(), fIdx, tagVal)
+			subBuff, err := t.serializeSimpleField(fIdx.Kind(), fIdx, tagVal)
 			if err != nil {
 				return nil, err
 			}
@@ -209,10 +209,10 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 		return buff, nil
 	}
 
-	return t.serializeBuiltIn(fieldKind, fieldValue, tagVal)
+	return t.serializeSimpleField(fieldKind, fieldValue, tagVal)
 }
 
-func (t *TLHandler) serializeBuiltIn(fieldKind reflect.Kind, fieldValue reflect.Value, tagVal string) ([]byte, error) {
+func (t *TLHandler) serializeSimpleField(fieldKind reflect.Kind, fieldValue reflect.Value, tagVal string) ([]byte, error) {
 	switch tagVal {
 	case "int":
 		buff := make([]byte, 4)
@@ -295,7 +295,7 @@ func (t *TLHandler) serializeBuiltIn(fieldKind reflect.Kind, fieldValue reflect.
 			fV := fieldValue.Elem()
 			fK := fV.Kind()
 
-			return t.serializeBuiltIn(fK, fV, tagVal)
+			return t.serializeSimpleField(fK, fV, tagVal)
 		}
 
 		// in case is a custom type, check if is previously registered

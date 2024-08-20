@@ -35,7 +35,7 @@ func BuildSharedCipher(key []byte, checksum []byte) (cipher.Stream, error) {
 	k := make([]byte, 32)
 
 	copy(k, key[:16])
-	copy(k, checksum[16:32])
+	copy(k[16:], checksum[16:32])
 
 	iv := []byte{
 		checksum[0], checksum[1], checksum[2], checksum[3], key[20], key[21], key[22], key[23],
