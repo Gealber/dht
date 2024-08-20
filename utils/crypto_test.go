@@ -65,7 +65,7 @@ func TestBuildShareCipher(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tonutilsCipher, err := BuildSharedCipher(sharedSecret, checkSum[:])
+	tonutilsCipher, err := adnl.BuildSharedCipher(sharedSecret, checkSum[:])
 	if err != nil {
 		t.Fatal(err)
 	}
