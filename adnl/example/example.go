@@ -17,27 +17,40 @@ import (
 	"time"
 
 	"github.com/Gealber/dht/adnl"
-	"github.com/Gealber/dht/config"
 	"github.com/Gealber/dht/tl"
 	"github.com/Gealber/dht/utils"
 )
 
 func main() {
-	cfg, err := config.LoadConfig()
+	example()
+}
+
+func example() {
+	dhtNodeKey, ipDec, port, err := exampleNode()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	node := cfg.Dht.StaticNodes.Nodes[0]
-
-	ipDec := node.AddrList.Addrs[0].IP
-	port := node.AddrList.Addrs[0].Port
-	key := node.ID.Key
-
-	dhtNodeKey, err := base64.StdEncoding.DecodeString(key)
+	ourPub, ourPk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// cfg, err := config.LoadConfig()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// node := cfg.Dht.StaticNodes.Nodes[0]
+
+	// ipDec := node.AddrList.Addrs[0].IP
+	// port := node.AddrList.Addrs[0].Port
+	// key := node.ID.Key
+
+	// dhtNodeKey, err := base64.StdEncoding.DecodeString(key)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	// convert decimal ip to normal ip formatting
 	ip := make(net.IP, 4)
@@ -72,7 +85,7 @@ func main() {
 		}
 	}()
 
-	payload, err := buildExamplePayload(dhtNodeKey)
+	payload, err := buildExamplePayload(dhtNodeKey, ourPub, ourPk)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -93,9 +106,10 @@ func main() {
 	}
 }
 
-func buildExamplePayload(dhtNodeKey []byte) ([]byte, error) {
+func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25519.PrivateKey) ([]byte, error) {
 	tlHandler := tl.New()
 
+	// register models in order to perform a TL serialization
 	models := []tl.ModelRegister{
 		{T: adnl.PacketContent{}, Def: adnl.TLPacketContents},
 		{T: adnl.CreateChannel{}, Def: adnl.TLCreateChannel},
@@ -107,34 +121,29 @@ func buildExamplePayload(dhtNodeKey []byte) ([]byte, error) {
 	}
 	tlHandler.Register(models)
 
-	// adnl.message.createChannel key:int256 date:int = adnl.Message;
 	channelKey, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
 
+	// adnl.message.createChannel key:int256 date:int = adnl.Message;
 	date := time.Now().Unix()
 	createChn := adnl.CreateChannel{
 		Key:  channelKey,
 		Date: date,
 	}
 
-	queryID := make([]byte, 32)
-	rand.Read(queryID)
-
 	query, err := tlHandler.Serialize(adnl.GetSignedAddressList{}, true)
 	if err != nil {
 		return nil, err
 	}
 
+	queryID := make([]byte, 32)
+	rand.Read(queryID)
+
 	msgQuery := adnl.Query{
 		QueryID: queryID,
 		Query:   query,
-	}
-
-	ourPub, ourPk, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, err
 	}
 
 	buff := make([]byte, 30)
@@ -181,14 +190,14 @@ func buildExamplePayload(dhtNodeKey []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	h := sha256.Sum256(data)
+	checkSum := sha256.Sum256(data)
 
 	sharedKey, err := utils.GenerateSharedKey(ourPk, dhtNodeKey)
 	if err != nil {
 		return nil, err
 	}
 
-	sharedCipher, err := utils.BuildSharedCipher(sharedKey, h[:])
+	sharedCipher, err := utils.BuildSharedCipher(sharedKey, checkSum[:])
 	if err != nil {
 		return nil, err
 	}
@@ -200,15 +209,35 @@ func buildExamplePayload(dhtNodeKey []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	log.Println("DATA ENCRYPTED LENGTH: ", len(data))
-	pLen := len(keyID) + len(ourPub) + len(h) + len(data)
-	log.Println("PAYLOAD LENGTH: ", pLen)
+	pLen := len(keyID) + len(ourPub) + len(checkSum) + len(data)
 	// | SERVER KEY ID | OUR PUB KEY | SHA256 CONTENT HASH BEFORE ENCRYPTION | ENCRYPTED CONTENT OF THE PACKET |
 	payload := make([]byte, pLen)
 	copy(payload, keyID)
 	copy(payload[32:], ourPub)
-	copy(payload[64:], h[:])
+	copy(payload[64:], checkSum[:])
 	copy(payload[96:], data)
 
 	return payload, nil
+}
+
+func exampleNode() ([]byte, int, int, error) {
+	// dhtNodeKey, _ := hex.DecodeString("2b114238c1e711a02c3683160f89c4ea881a15b965b4e39c7daefa59f4e74618")
+	ip := 2130706433
+	port := 3278
+
+	dhtNodeKey, err := base64.StdEncoding.DecodeString("cCiGJWowQbg1uzB+UNMgEqxoBukGlvZrndZDCx+Wctc=")
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	// nodeKeyStr := "fZnkoIAxrTd4xeBgVpZFRm5SvVvSx7eN3Vbe8c83YMk="
+	// ip := 1091897261
+	// port := 15813
+
+	// dhtNodeKey, err := base64.StdEncoding.DecodeString(nodeKeyStr)
+	// if err != nil {
+	// 	return nil, 0, 0, err
+	// }
+
+	return dhtNodeKey, ip, port, nil
 }
