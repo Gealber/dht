@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -19,21 +18,44 @@ import (
 	"github.com/Gealber/dht/adnl"
 	"github.com/Gealber/dht/tl"
 	"github.com/Gealber/dht/utils"
+	xssnickadnl "github.com/xssnick/tonutils-go/adnl"
 )
 
 func main() {
-	example()
-}
+	done := make(chan struct{})
+	errChn := make(chan error, 1)
+	aPub, aPriv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("SRV PUB: %x\n", aPub)
 
-func example() {
-	dhtNodeKey, ipDec, port, err := exampleNode()
+	go func() {
+		errChn <- server(aPub, aPriv, done)
+	}()
+
+	// running adnl server in background
+	err = example(aPub, 2130706433, 9055)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	select {
+	case err := <-errChn:
+		log.Fatal(err)
+	case <-ctx.Done():
+		log.Println("sending done signal")
+		done <- struct{}{}
+	}
+}
+
+func example(dhtNodeKey []byte, ipDec, port int) error {
 	ourPub, ourPk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// cfg, err := config.LoadConfig()
@@ -60,7 +82,7 @@ func example() {
 	// shout to this IP and PORT using UDP
 	conn, err := net.Dial("udp", fmt.Sprintf("%s:%d", ip.String(), int32(port)))
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer conn.Close()
 	// setting a timeout for reads
@@ -93,17 +115,19 @@ func example() {
 	// ignores for the sake of the example the amount of data written
 	written, err := conn.Write(payload)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	log.Println("WRITTEN AMOUNT OF BYTES: ", written, "from: ", len(payload))
 
 	// wait for 5 secs before shutting down
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	select {
 	case <-ctx.Done():
 	}
+
+	return nil
 }
 
 func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25519.PrivateKey) ([]byte, error) {
@@ -118,6 +142,7 @@ func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25
 		{T: adnl.Query{}, Def: adnl.TLMessageQuery},
 		{T: adnl.UDP{}, Def: adnl.TLAddressUDP},
 		{T: adnl.List{}, Def: adnl.TLAddressList},
+		{T: adnl.Ping{}, Def: adnl.TLPing},
 	}
 	tlHandler.Register(models)
 
@@ -133,7 +158,9 @@ func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25
 		Date: date,
 	}
 
-	query, err := tlHandler.Serialize(adnl.GetSignedAddressList{}, true)
+	query, err := tlHandler.Serialize(adnl.Ping{
+		Value: 1,
+	}, true)
 	if err != nil {
 		return nil, err
 	}
@@ -220,24 +247,43 @@ func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25
 	return payload, nil
 }
 
-func exampleNode() ([]byte, int, int, error) {
-	// dhtNodeKey, _ := hex.DecodeString("2b114238c1e711a02c3683160f89c4ea881a15b965b4e39c7daefa59f4e74618")
-	ip := 2130706433
-	port := 3278
+type TestMsg struct {
+	Data []byte `tl:"bytes"`
+}
 
-	dhtNodeKey, err := base64.StdEncoding.DecodeString("cCiGJWowQbg1uzB+UNMgEqxoBukGlvZrndZDCx+Wctc=")
+func server(aPub ed25519.PublicKey, aPriv ed25519.PrivateKey, done chan struct{}) error {
+	a := xssnickadnl.NewGateway(aPriv)
+	err := a.StartServer("127.0.0.1:9055")
 	if err != nil {
-		return nil, 0, 0, err
+		return err
+	}
+	a.SetConnectionHandler(connHandler)
+
+	fmt.Println("Listening on 127.0.0.1:9055 and waiting for context to timeout")
+	select {
+	case <-done:
 	}
 
-	// nodeKeyStr := "fZnkoIAxrTd4xeBgVpZFRm5SvVvSx7eN3Vbe8c83YMk="
-	// ip := 1091897261
-	// port := 15813
+	return nil
+}
 
-	// dhtNodeKey, err := base64.StdEncoding.DecodeString(nodeKeyStr)
-	// if err != nil {
-	// 	return nil, 0, 0, err
-	// }
-
-	return dhtNodeKey, ip, port, nil
+func connHandler(client xssnickadnl.Peer) error {
+	client.SetQueryHandler(func(msg *xssnickadnl.MessageQuery) error {
+		switch m := msg.Data.(type) {
+		case xssnickadnl.MessagePing:
+			err := client.Answer(context.Background(), msg.ID, xssnickadnl.MessagePong{
+				Value: m.Value,
+			})
+			if err != nil {
+				panic(err)
+			}
+		}
+		return nil
+	})
+	client.SetCustomMessageHandler(func(msg *xssnickadnl.MessageCustom) error {
+		return client.SendCustomMessage(context.Background(), TestMsg{Data: make([]byte, 1280)})
+	})
+	client.SetDisconnectHandler(func(addr string, key ed25519.PublicKey) {
+	})
+	return nil
 }
