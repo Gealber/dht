@@ -17,6 +17,7 @@ This todo list will increase and decrease according to the progress. Don't take 
     - [DONE] Make ADNL on UDP example works. There's something that I'm missing here.
         - [DONE] Integrate xssnick/tonutils-go/adnl for the example in the meanwhile.
     - Implement ADNL or integrate existing implementation from tonutils-go
+        - [IN PROGRESS] Write first an internal documentation about how ADNL works. Taking ton blockchain code as reference.
         - [IN PROGRESS] Read ADNL implementation in ton blockchain, yeah I don't understand C++
     - [DONE] Implement AES-CTR cipher
     - Handle responses from adnl requests. Current implementation is assuming adnl is async.
