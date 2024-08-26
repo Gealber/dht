@@ -14,8 +14,10 @@ This todo list will increase and decrease according to the progress. Don't take 
     - Handle 'vector' and flags cases for parsing(On hold untils will be needed)
     - Refactor both serializer and parser, methods are too long
 - ADNL
-    - [IN PROGRESS] Make ADNL on UDP example works.
+    - [DONE] Make ADNL on UDP example works. There's something that I'm missing here.
+        - [DONE] Integrate xssnick/tonutils-go/adnl for the example in the meanwhile.
     - Implement ADNL or integrate existing implementation from tonutils-go
+        - [IN PROGRESS] Read ADNL implementation in ton blockchain, yeah I don't understand C++
     - [DONE] Implement AES-CTR cipher
     - Handle responses from adnl requests. Current implementation is assuming adnl is async.
 - DHT methods
@@ -25,6 +27,7 @@ This todo list will increase and decrease according to the progress. Don't take 
     - Implement STORE
     - Implement FIND_NODE
     - Implement FIND_VALUE
+- Remove references to tonutils-go implementations
 - Integrate key-value storage, just use interface and later on decide which key-value to use.
 - Implement clean up process in node when with a shutdown signal
 - Write during the process unit tests for all components
