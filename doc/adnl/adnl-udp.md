@@ -1,6 +1,6 @@
 ## ADNL UDP(WIP)
 
-This is an internal doc, not official at all, describing the ADNL over UDP protocol in a more formal way. Given that the official documentation to be honest is just an example, which lack formality. The description of ADNL over TCP by other hand is way better, at least more structured. In the whitepaper of TON there's a quite simplistic description of the protocol without any details. In general the networking documentation of TON is quite bad. So I'll try to do my best at least with ADNL over UDP.
+This is an internal doc, not official at all, describing the ADNL over UDP protocol in a more formal way. Given that the official documentation to be honest lacks formality. The description has a good approach, that is explaining by example, but still there are so many gaps that should be included. Even that the official documentaion lacks formality, is still way better than the description on the TON whitepaper. In the whitepaper of TON there's a quite simplistic description of the protocol without any details, which gives the impression that the implementation of the protocol was only discussed internally between the developers of the TON blockchain. I understand that the whitepaper is not intended for that, but a document dedicated to the protocol that constitute the core of the networking I think is needed. In general the networking documentation of TON is quite bad, so I'll try to do my best at least with ADNL over UDP. 
 
 ## Requirements
 
@@ -18,7 +18,8 @@ Before you start diving in, there are some previous knowledge that you should ha
 
 ## Note
 
-All the TL definition used here can be found in [tl/generate/scheme](https://github.com/ton-blockchain/ton/tree/master/tl/generate/scheme).
+1. All the TL definition used here can be found in [tl/generate/scheme](https://github.com/ton-blockchain/ton/tree/master/tl/generate/scheme).
+2. This article might have incorrect or incomplete information, so feel free to suggest a correction of it.
 
 ## Description
 
@@ -87,7 +88,7 @@ This is the TL definition, I'll try to explain better the components of that TL 
 
 **dst_reinit_date**
 
-This field when received by a node has a particular requirement in the code implementation that I don't know if it's a bug, or just a useless field included. There are two checks on this field that basically will restrict `dst_reinit_date` to be `dst_reinit_date <=0` or `dst_reinit_date = d`. The first checked performed on the received field, on method [AdnlPeerPairImpl::receive_packet_checked](https://github.com/ton-blockchain/ton/blob/140320b0dbe0bdd9fd954b6633a3677acc75a8e6/adnl/adnl-peer.cpp#L117):
+This field when received by a node has a particular requirement in the code implementation that I don't know if it's a bug, or just a useless field included. There are two checks on this field that basically will restrict `dst_reinit_date` to be `dst_reinit_date <=0` or `dst_reinit_date = d`. The first checked performed on the received field, on method [AdnlPeerPairImpl::receive_packet_checked](https://github.com/ton-blockchain/ton/blob/140320b0dbe0bdd9fd954b6633a3677acc75a8e6/adnl/adnl-peer.cpp#L117), drop messages packets which `dst_reinit_date > d`:
 
 ```C++
 auto d = Adnl::adnl_start_time();
@@ -250,7 +251,7 @@ The format of the data sent on a `channel` doesn't need to include the sender pu
 
 **Encryption key id**
 
-Sender outgoing encryption key id, `SHA256(BOXED_SERIALIZED(AES_PUBLICKEY_TL_OBJECT)).
+Sender outgoing encryption key id, `SHA256(BOXED_SERIALIZED(AES_PUBLICKEY_TL_OBJECT))`.
 
 **Content of packet**
 
@@ -268,5 +269,3 @@ The content of the packet follows as well a `adnl.packetContent`, but way more s
 A more detailed example can be found in the [official documentaion](https://docs.ton.org/develop/network/adnl-udp#communication-in-a-channel), and I'll provide one with code here as well later.
 
 ### Other message types
-
-Not yet
