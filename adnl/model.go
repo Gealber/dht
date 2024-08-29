@@ -11,6 +11,7 @@ const (
 	TLAddressUDP        = "adnl.address.udp ip:int port:int = adnl.Address"
 	TLAddressList       = "adnl.addressList addrs:(vector adnl.Address) version:int reinit_date:int priority:int expire_at:int = adnl.AddressList"
 	TLPublicKeyEd25519  = "pub.ed25519 key:int256 = PublicKey"
+	TLPublicKeyAES      = "pub.aes key:int256 = PublicKey"
 	TLPacketContents    = `adnl.packetContents rand1:bytes flags:# from:flags.0?PublicKey from_short:flags.1?adnl.id.short message:flags.2?adnl.Message messages:flags.3?(vector adnl.Message) address:flags.4?adnl.addressList priority_address:flags.5?adnl.addressList seqno:flags.6?long confirm_seqno:flags.7?long recv_addr_list_version:flags.8?int recv_priority_addr_list_version:flags.9?int reinit_date:flags.10?int dst_reinit_date:flags.10?int signature:flags.11?bytes rand2:bytes = adnl.PacketContents`
 	TLPing              = "adnl.ping value:long = adnl.Pong"
 )
@@ -45,6 +46,10 @@ type UDP struct {
 }
 
 type PublicKeyED25519 struct {
+	Key []byte `tl:"int256"`
+}
+
+type PublicKeyAES struct {
 	Key []byte `tl:"int256"`
 }
 
