@@ -268,6 +268,6 @@ The content of the packet follows as well a `adnl.packetContent`, but way more s
 
 A more detailed example can be found in the [official documentaion](https://docs.ton.org/develop/network/adnl-udp#communication-in-a-channel), and I'll provide one with code here as well later.
 
-## Code example
+## Code example(NOT READY YET)
 
 A code example can be found in [adnl_udp_example.go](https://github.com/Gealber/dht/blob/master/doc/adnl/adnl_udp_example.go).
