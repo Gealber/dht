@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
+	"os"
 
 	"github.com/Gealber/dht/tl"
+	"github.com/Gealber/dht/utils"
 )
 
 type Peer struct {
@@ -22,7 +26,8 @@ type Peer struct {
 	conn    net.Conn
 	tlH     *tl.TLHandler
 
-	chns map[string]channel
+	chns   map[string]channel
+	logger *log.Logger
 	// add a closer channel to handle close connection
 }
 
@@ -58,6 +63,8 @@ func New(privKey ed25519.PrivateKey, pubKey ed25519.PublicKey, port int) (*Peer,
 		privKey: privKey,
 		pubKey:  pubKey,
 		tlH:     tlH,
+		chns:    make(map[string]channel),
+		logger:  log.New(os.Stdout, "[adnl-peer]", log.LUTC),
 	}, nil
 }
 
@@ -104,7 +111,11 @@ func (p *Peer) Listen() error {
 		}
 
 		// message is not to a registered channel and is for the peer
-		go p.processMsgIn(buff)
+		// this messages needs to include the publick [key(32 bytes) | checksum(32 bytes) | encrypted data]
+		// at least needs to be bigger than 64
+		if len(buff) > 64 {
+			go p.processMsgIn(buff)
+		}
 	}
 }
 
@@ -113,4 +124,67 @@ func (p *Peer) processMsgInChannel(chnInfo channel, data []byte) {
 }
 
 // TODO: implementation
-func (p *Peer) processMsgIn(data []byte) {}
+func (p *Peer) processMsgIn(data []byte) {
+	// extract sender public key
+	senderPubKey := data[:32]
+	checksum := data[32:64]
+	data = data[64:]
+	// let's build our shared secret as explained in the documentation
+	sharedSecret, err := utils.GenerateSharedKey(p.privKey, senderPubKey)
+	if err != nil {
+		// log the error and ignore the packet
+		p.logger.Println("error generating shared key:", err)
+		return
+	}
+
+	cipher, err := utils.BuildSharedCipher(sharedSecret, checksum)
+	if err != nil {
+		// log the error and ignore the packet
+		p.logger.Println("error while building shared cipher:", err)
+		return
+	}
+
+	// decrypt data first, and later perform integrity validation of data
+	cipher.XORKeyStream(data, data)
+	localChecksum := sha256.Sum256(data)
+	if !bytes.Equal(localChecksum[:], checksum) {
+		p.logger.Println("failed checksum validation")
+		return
+	}
+
+	// TODO: parse unencrypted packet, packet should be an adnl.packetContent
+	err = p.parseMsgIn(data)
+	if err != nil {
+		p.logger.Println("failed parsing of message err:", err)
+		return
+	}
+}
+
+func (p *Peer) parseMsgIn(data []byte) error {
+	var obj tl.PacketContent
+	err := p.tlH.Parse(data, &obj, true)
+	if err != nil {
+		return err
+	}
+
+	// validate packet content
+	err = p.packetContentValidation(obj)
+	if err != nil {
+		return err
+	}
+
+	// TODO: process the single message
+	if obj.Message != nil {
+	}
+
+	// TODO: process each of the messages in the adnl.packetContent
+	// for _, msg := range obj.Messages {
+	// }
+
+	return nil
+}
+
+// TODO: implement
+func (p *Peer) packetContentValidation(pkt tl.PacketContent) error {
+	return nil
+}
