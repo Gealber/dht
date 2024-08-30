@@ -62,17 +62,13 @@ func TestParse(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			n, err := s.Parse(data, &tc.obj, tc.boxed)
+			err = s.Parse(data, &tc.obj, tc.boxed)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			if reflect.DeepEqual(tc.obj, tc.expectedObj) {
 				t.Fatal(errors.New("expected object differs from got"))
-			}
-
-			if len(data) != n {
-				t.Fatalf("length data and data consumed differs: want: %d got: %d", len(data), n)
 			}
 		})
 	}
@@ -94,7 +90,7 @@ func TestNesstedParse(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			n, err := s.Parse(data, &tc.obj, tc.boxed)
+			err = s.Parse(data, &tc.obj, tc.boxed)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -103,9 +99,6 @@ func TestNesstedParse(t *testing.T) {
 				t.Fatal(errors.New("expected object differs from got"))
 			}
 
-			if len(data) != n {
-				t.Fatalf("length data and data consumed differs: want: %d got: %d", len(data), n)
-			}
 		})
 	}
 }

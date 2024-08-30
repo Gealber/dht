@@ -315,21 +315,22 @@ func (t *TLHandler) serializeSimpleField(fieldKind reflect.Kind, fieldValue refl
 }
 
 // Parse data into obj, is assummed obj TL definition was already registered with Register method, and data provided was serialized in the order the TL definition states.
-func (t *TLHandler) Parse(data []byte, obj any, boxed bool) (int, error) {
-	amountParsed := 0
+func (t *TLHandler) Parse(data []byte, obj any, boxed bool) error {
 	if len(data) == 0 {
-		return amountParsed, errors.New("empty data")
+		return errors.New("empty data")
 	}
 
 	objV := reflect.ValueOf(obj)
 	if objV.Kind() != reflect.Pointer || objV.IsNil() {
-		return amountParsed, fmt.Errorf("v should be a pointer and not nil")
+		return fmt.Errorf("v should be a pointer and not nil")
 	}
 
-	return t.parse(data, objV, boxed)
+	_, err := t.parse(data, objV, boxed)
+
+	return err
 }
 
-// TODO: implement optional and refactor to make it smaller.
+// TODO: refactor to make it a smaller method
 func (t *TLHandler) parse(data []byte, objValue reflect.Value, boxed bool) (int, error) {
 	pos := 0
 	// check if schemeID correspond to one registered

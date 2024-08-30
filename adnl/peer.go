@@ -152,5 +152,39 @@ func (p *Peer) processMsgIn(data []byte) {
 		return
 	}
 
-	// TODO: parse unencrypted packet
+	// TODO: parse unencrypted packet, packet should be an adnl.packetContent
+	err = p.parseMsgIn(data)
+	if err != nil {
+		p.logger.Println("failed parsing of message err:", err)
+		return
+	}
+}
+
+func (p *Peer) parseMsgIn(data []byte) error {
+	var obj tl.PacketContent
+	err := p.tlH.Parse(data, &obj, true)
+	if err != nil {
+		return err
+	}
+
+	// validate packet content
+	err = p.packetContentValidation(obj)
+	if err != nil {
+		return err
+	}
+
+	// TODO: process the single message
+	if obj.Message != nil {
+	}
+
+	// TODO: process each of the messages in the adnl.packetContent
+	// for _, msg := range obj.Messages {
+	// }
+
+	return nil
+}
+
+// TODO: implement
+func (p *Peer) packetContentValidation(pkt tl.PacketContent) error {
+	return nil
 }
