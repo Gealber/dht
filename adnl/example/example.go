@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Gealber/dht/adnl"
 	"github.com/Gealber/dht/tl"
 	"github.com/Gealber/dht/utils"
 	xssnickadnl "github.com/xssnick/tonutils-go/adnl"
@@ -135,14 +134,14 @@ func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25
 
 	// register models in order to perform a TL serialization
 	models := []tl.ModelRegister{
-		{T: adnl.PacketContent{}, Def: adnl.TLPacketContents},
-		{T: adnl.CreateChannel{}, Def: adnl.TLCreateChannel},
-		{T: adnl.GetSignedAddressList{}, Def: adnl.TLSignedAddressList},
-		{T: adnl.PublicKeyED25519{}, Def: adnl.TLPublicKeyEd25519},
-		{T: adnl.Query{}, Def: adnl.TLMessageQuery},
-		{T: adnl.UDP{}, Def: adnl.TLAddressUDP},
-		{T: adnl.List{}, Def: adnl.TLAddressList},
-		{T: adnl.Ping{}, Def: adnl.TLPing},
+		{T: tl.PacketContent{}, Def: tl.TLPacketContents},
+		{T: tl.CreateChannel{}, Def: tl.TLCreateChannel},
+		{T: tl.GetSignedAddressList{}, Def: tl.TLSignedAddressList},
+		{T: tl.PublicKeyED25519{}, Def: tl.TLPublicKeyEd25519},
+		{T: tl.Query{}, Def: tl.TLMessageQuery},
+		{T: tl.UDP{}, Def: tl.TLAddressUDP},
+		{T: tl.List{}, Def: tl.TLAddressList},
+		{T: tl.Ping{}, Def: tl.TLPing},
 	}
 	tlHandler.Register(models)
 
@@ -153,12 +152,12 @@ func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25
 
 	// adnl.message.createChannel key:int256 date:int = adnl.Message;
 	date := time.Now().Unix()
-	createChn := adnl.CreateChannel{
+	createChn := tl.CreateChannel{
 		Key:  channelKey,
 		Date: date,
 	}
 
-	query, err := tlHandler.Serialize(adnl.Ping{
+	query, err := tlHandler.Serialize(tl.Ping{
 		Value: 1,
 	}, true)
 	if err != nil {
@@ -168,7 +167,7 @@ func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25
 	queryID := make([]byte, 32)
 	rand.Read(queryID)
 
-	msgQuery := adnl.Query{
+	msgQuery := tl.Query{
 		QueryID: queryID,
 		Query:   query,
 	}
@@ -177,18 +176,18 @@ func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25
 	rand.Read(buff)
 	rand1, rand2 := buff[:15], buff[15:]
 
-	pkt := adnl.PacketContent{
+	pkt := tl.PacketContent{
 		Rand1: rand1,
 		Flags: 0x05d9,
-		From: adnl.PublicKeyED25519{
+		From: tl.PublicKeyED25519{
 			Key: ourPub,
 		},
 		Messages: []any{
 			createChn,
 			msgQuery,
 		},
-		AddressList: adnl.List{
-			Addresses:  []adnl.UDP{},
+		AddressList: tl.List{
+			Addresses:  []tl.UDP{},
 			Version:    date,
 			ReinitDate: date,
 			Priority:   0,

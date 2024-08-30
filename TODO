@@ -19,6 +19,7 @@ This todo list will increase and decrease according to the progress. Don't take 
     - Implement ADNL or integrate existing implementation from tonutils-go
         - [DONE] Write first an internal documentation about how ADNL works. Taking ton blockchain code as reference.
         - [IN PROGRESS] Read ADNL implementation in ton blockchain, yeah I don't understand C++
+        - [IN-PROGRESS] Start implementing the protocol.
     - [DONE] Implement AES-CTR cipher
     - Handle responses from adnl requests. Current implementation is assuming adnl is async.
 - DHT methods
