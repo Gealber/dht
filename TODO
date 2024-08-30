@@ -11,15 +11,17 @@ This todo list will increase and decrease according to the progress. Don't take 
     - [DONE] Parse data bytes into struct with complex types.
     - [DONE] Serialize flags on TL definition
     - [DONE] Handle 'vector' TL type for serialization
-    - Handle 'vector' and flags cases for parsing(On hold untils will be needed)
+    - [IN-PROGRESS] Handle 'vector' and flags cases for parsing(On hold untils will be needed)
     - Refactor both serializer and parser, methods are too long
 - ADNL
     - [DONE] Make ADNL on UDP example works. There's something that I'm missing here.
         - [DONE] Integrate xssnick/tonutils-go/adnl for the example in the meanwhile.
     - Implement ADNL or integrate existing implementation from tonutils-go
         - [DONE] Write first an internal documentation about how ADNL works. Taking ton blockchain code as reference.
-        - [IN PROGRESS] Read ADNL implementation in ton blockchain, yeah I don't understand C++
+        - [IN-PROGRESS] Read ADNL implementation in ton blockchain, yeah I don't understand C++
         - [IN-PROGRESS] Start implementing the protocol.
+            - [DONE] Perform checksum validation on messages OUTSIDE channel 
+            - [] Perform checksum validation on messages IN channel 
     - [DONE] Implement AES-CTR cipher
     - Handle responses from adnl requests. Current implementation is assuming adnl is async.
 - DHT methods
