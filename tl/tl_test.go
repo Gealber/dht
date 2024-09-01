@@ -103,6 +103,35 @@ func TestNesstedParse(t *testing.T) {
 	}
 }
 
+func TestParseWithOptional(t *testing.T) {
+	s := New()
+	tcs := genOptionalParseTCs()
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			if len(tc.depTlDefs) > 0 {
+				s.Register(tc.depTlDefs)
+			}
+
+			// registering tl scheme
+			s.Register([]ModelRegister{tc.tlDef})
+			data, err := hex.DecodeString(tc.dataStr)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = s.Parse(data, &tc.obj, tc.boxed)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if reflect.DeepEqual(tc.obj, tc.expectedObj) {
+				t.Fatal(errors.New("expected object differs from got"))
+			}
+
+		})
+	}
+}
+
 type serializeTestCase struct {
 	name            string
 	dataStr         string
@@ -131,6 +160,16 @@ type parseComplexTestCase struct {
 	tlDef       ModelRegister
 	depTlDefs   []ModelRegister
 	expectedObj TestComplexUser
+}
+
+type parseOptionalTestCase struct {
+	name        string
+	boxed       bool
+	dataStr     string
+	obj         TestPacketContents
+	tlDef       ModelRegister
+	depTlDefs   []ModelRegister
+	expectedObj TestPacketContents
 }
 
 // TL def: testUser intT:int strT:string bigIntT:int256 bigIntBT:int256 doubleT:double boolT:bool bytesT:bytes = TestUser;
@@ -410,6 +449,75 @@ func genNestedParseTCs() []parseComplexTestCase {
 				BoolT:    true,
 				BytesT:   []byte("Hola"),
 				UserData: TestUserData{},
+			},
+			boxed: true,
+		},
+	}
+}
+
+func genOptionalParseTCs() []parseOptionalTestCase {
+	rand1, _ := hex.DecodeString("4e0e7dd6d0c5646c204573bc47e567")
+	rand2, _ := hex.DecodeString("2b6a8c0509f85da9f3c7e11c86ba22")
+	queryID, _ := hex.DecodeString("d7be82afbc80516ebca39784b8e2209886a69601251571444514b7f17fcd8875")
+	key, _ := hex.DecodeString("afc46336dd352049b366c7fd3fc1b143a518f0d02d9faef896cb0155488915d6")
+	createChannelKey, _ := hex.DecodeString("d59d8e3991be20b54dde8b78b3af18b379a62fa30e64af361c75452f6af019d7")
+	query, _ := hex.DecodeString("ed4879a9")
+
+	return []parseOptionalTestCase{
+		{
+			name:    "struct with custom types and optional fields",
+			dataStr: "89cd42d10f4e0e7dd6d0c5646c204573bc47e567d9050000c6b41348afc46336dd352049b366c7fd3fc1b143a518f0d02d9faef896cb0155488915d602000000bbc373e6d59d8e3991be20b54dde8b78b3af18b379a62fa30e64af361c75452f6af019d7555c87637af98bb4d7be82afbc80516ebca39784b8e2209886a69601251571444514b7f17fcd887504ed4879a900000000000000555c8763555c8763000000000000000001000000000000000000000000000000555c8763555c8763000000000f2b6a8c0509f85da9f3c7e11c86ba22",
+			obj:     TestPacketContents{},
+			tlDef: ModelRegister{
+				T:   TestPacketContents{},
+				Def: testPacketContentsTL,
+			},
+			depTlDefs: []ModelRegister{
+				{
+					T:   TestPublicKey{},
+					Def: testPublicKeyTL,
+				},
+				{
+					T:   TestAdnlIDShort{},
+					Def: testAdnlIDShortTL,
+				},
+				{
+					T:   TestAdnlMessageCreateChannel{},
+					Def: testAdnlMessageCreateChannelTL,
+				},
+				{
+					T:   TestAdnlAddressList{},
+					Def: testAdnlAddressListTL,
+				},
+				{
+					T:   TestAdnlMessageQuery{},
+					Def: testAdnlMessageQueryTL,
+				},
+			},
+			expectedObj: TestPacketContents{
+				Rand1: rand1,
+				Flags: 0x05d9,
+				From: TestPublicKey{
+					Key: key,
+				},
+				Messages: []TestAdnlMessage{
+					TestAdnlMessageCreateChannel{
+						Key:  createChannelKey,
+						Date: 0x63875c55,
+					},
+					TestAdnlMessageQuery{
+						QueryID: queryID,
+						Query:   query,
+					},
+				},
+				Address: TestAdnlAddressList{
+					Version:    0x63875c55,
+					ReinitDate: 0x63875c55,
+				},
+				Seqno:                  1,
+				RecvAddressListVersion: 0x63875c55,
+				ReinitDate:             0x63875c55,
+				Rand2:                  rand2,
 			},
 			boxed: true,
 		},

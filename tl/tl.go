@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
+	"log"
 	"math/big"
 	"reflect"
 	"strconv"
@@ -356,7 +357,13 @@ func (t *TLHandler) parse(data []byte, objValue reflect.Value, boxed bool) (int,
 		pos = 4
 	}
 
+	// TODO: this loops is assuming all fields are present, which is not correct
 	for i, fieldT := range inOrderTs {
+		bitPos := extractOptionalBitPosition(fieldT)
+		if bitPos != -1 {
+			// TODO: check that flag in this position bit is set
+		}
+
 		fieldValue := vt.Field(i)
 		fieldKind := fieldValue.Kind()
 
@@ -481,6 +488,7 @@ func (t *TLHandler) parse(data []byte, objValue reflect.Value, boxed bool) (int,
 				}
 				pos += consumed
 			} else {
+				log.Println("FIELD TYPE: ", fieldT)
 				return pos, errors.New("unregistered custom type as field")
 			}
 		}
