@@ -12,6 +12,7 @@ This todo list will increase and decrease according to the progress. Don't take 
     - [DONE] Serialize flags on TL definition
     - [DONE] Handle 'vector' TL type for serialization
     - [IN-PROGRESS] Handle 'vector' and flags cases for parsing(On hold untils will be needed)
+    - Improve TL structure tests, some of the tests cases are not generic enough
     - Refactor both serializer and parser, methods are too long
 - ADNL
     - [DONE] Make ADNL on UDP example works. There's something that I'm missing here.
