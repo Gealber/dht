@@ -51,37 +51,39 @@ func extractTypes(tlDef string) []string {
 	return result
 }
 
-// extractOptionalBitPosition given a TL type extract the bit position in 'flags' if present.
-// For example: 'flags.3?PublicKey', should return 3. In case is not present -1 should be returned.
-func extractOptionalBitPosition(t string) int {
+// extractBitPosition given a TL type extract the bit position in 'flags' if present and the type.
+// For example: 'flags.3?PublicKey', should return 3. In case is not present -1 and PublicKey should be returned.
+func extractBitPosition(t string) (int, string) {
 	if len(t) <= 6 {
 		// should have at least 6 characters for 'flags.'
-		return -1
+		return -1, ""
 	}
 
 	if t[:6] != "flags." {
-		return -1
+		return -1, ""
 	}
 
 	t = t[6:]
 
 	val := ""
 	start := 0
+	startT := -1
 	for i := 0; i < len(t); i++ {
 		if t[i] == '?' {
 			val = t[start:i]
+			startT = i
 			break
 		}
 	}
 
-	if val != "" {
+	if val != "" && startT != -1 {
 		result, err := strconv.Atoi(val)
 		if err != nil {
-			return -1
+			return -1, ""
 		}
 
-		return result
+		return result, t[startT+1:]
 	}
 
-	return -1
+	return -1, ""
 }

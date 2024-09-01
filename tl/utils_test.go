@@ -59,8 +59,12 @@ func Test_extractTypes(t *testing.T) {
 
 func Test_extractOptionalBitPosition(t *testing.T) {
 	tc := "flags.3?PublicKey"
-	result := extractOptionalBitPosition(tc)
+	result, td := extractBitPosition(tc)
 	if result != 3 {
 		t.Fatal("unexpected result")
+	}
+
+	if td != "PublicKey" {
+		t.Fatal("unexpected type definition")
 	}
 }
