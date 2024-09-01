@@ -334,6 +334,7 @@ func (t *TLHandler) Parse(data []byte, obj any, boxed bool) error {
 // TODO: refactor to make it a smaller method
 func (t *TLHandler) parse(data []byte, objValue reflect.Value, boxed bool) (int, error) {
 	pos := 0
+	flags := 0xffff // assuming all the bits are set
 	// check if schemeID correspond to one registered
 	registerKey := fmt.Sprintf("%s", reflect.Indirect(objValue).Type().String())
 	tlDef, ok := t.register[registerKey]
@@ -359,13 +360,24 @@ func (t *TLHandler) parse(data []byte, objValue reflect.Value, boxed bool) (int,
 
 	// TODO: this loops is assuming all fields are present, which is not correct
 	for i, fieldT := range inOrderTs {
-		bitPos := extractOptionalBitPosition(fieldT)
-		if bitPos != -1 {
-			// TODO: check that flag in this position bit is set
-		}
-
 		fieldValue := vt.Field(i)
 		fieldKind := fieldValue.Kind()
+
+		if fieldT == "#" {
+			if fieldKind < reflect.Int || fieldKind > reflect.Int64 {
+				flags = int(fieldValue.Int())
+			}
+		}
+
+		bitPos, tDef := extractBitPosition(fieldT)
+		if bitPos != -1 {
+			// flags is not set ignore processing of this field
+			if (flags>>bitPos)&1 == 0 {
+				continue
+			}
+			// otherwise
+			fieldT = tDef
+		}
 
 		switch fieldT {
 		case "int":
