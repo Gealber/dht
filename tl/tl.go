@@ -47,7 +47,8 @@ type ModelRegister struct {
 type TLHandler struct {
 	// map to keep registers of TL definition
 	// <go type %T,full definition> map
-	register map[string]string
+	register  map[string]string
+	tregister map[uint32]reflect.Type
 	// flagsRegister keeps track of flags set on models
 	flagsRegister map[string]int
 }
@@ -61,7 +62,9 @@ func New() *TLHandler {
 
 func (t *TLHandler) Register(models []ModelRegister) {
 	for _, m := range models {
+		id := Crc32(m.Def)
 		t.register[fmt.Sprintf("%T", m.T)] = m.Def
+		t.tregister[id] = reflect.TypeOf(m.T)
 	}
 }
 
@@ -197,6 +200,7 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 		// iterate over elements in slice and
 		size := fieldValue.Len()
 		for i := 0; i < size; i++ {
+			// TODO: FIX for each element we should include the scheme ID
 			fIdx := fieldValue.Index(i)
 			// parse element
 			subBuff, err := t.serializeSimpleField(fIdx.Kind(), fIdx, tagVal)
@@ -334,7 +338,7 @@ func (t *TLHandler) Parse(data []byte, obj any, boxed bool) error {
 // TODO: refactor to make it a smaller method
 func (t *TLHandler) parse(data []byte, objValue reflect.Value, boxed bool) (int, error) {
 	pos := 0
-	flags := 0xffff // assuming all the bits are set
+	var flags uint32 = 0xffffffff // assuming all the bits are set
 	// check if schemeID correspond to one registered
 	registerKey := fmt.Sprintf("%s", reflect.Indirect(objValue).Type().String())
 	tlDef, ok := t.register[registerKey]
@@ -363,12 +367,6 @@ func (t *TLHandler) parse(data []byte, objValue reflect.Value, boxed bool) (int,
 		fieldValue := vt.Field(i)
 		fieldKind := fieldValue.Kind()
 
-		if fieldT == "#" {
-			if fieldKind < reflect.Int || fieldKind > reflect.Int64 {
-				flags = int(fieldValue.Int())
-			}
-		}
-
 		bitPos, tDef := extractBitPosition(fieldT)
 		if bitPos != -1 {
 			// flags is not set ignore processing of this field
@@ -379,7 +377,57 @@ func (t *TLHandler) parse(data []byte, objValue reflect.Value, boxed bool) (int,
 			fieldT = tDef
 		}
 
+		if strings.HasPrefix(fieldT, "vector") {
+			// parse second part of tagVal expected to be 'vector T'
+			spaceIdx := strings.Index(fieldT, " ")
+			if spaceIdx == -1 {
+				return 0, errors.New("'vector' definition should be followed by space and TL type, for example 'vector int'")
+			}
+
+			// check the fieldKind is slice
+			if fieldKind != reflect.Slice {
+				return 0, errors.New("'vector' definition should be a slice")
+			}
+
+			// make part after ' ' space the tagVal
+			if len(fieldT)-1 == spaceIdx {
+				return 0, errors.New("tag value cannot end with space")
+			}
+
+			fieldT = fieldT[spaceIdx+1:]
+
+			// reading first 4 bytes as size of slice
+			vectorLen := binary.LittleEndian.Uint32(data[pos : pos+4])
+			pos += 4
+			// we should allocate a slice with vectorLen and type
+			fieldValue = reflect.MakeSlice(fieldValue.Type(), 0, int(vectorLen))
+			for i := 0; i < int(vectorLen); i++ {
+				// get scheme id in order to assign the correct type
+				id := binary.LittleEndian.Uint32(data[pos : pos+4])
+				elemT, ok := t.tregister[id]
+				if !ok {
+					return 0, fmt.Errorf("unregisterd type id: %d", id)
+				}
+
+				obj := reflect.New(elemT)
+
+				consumedPos, err := t.parse(data[pos:], obj, boxed)
+				if err != nil {
+					return 0, err
+				}
+				fieldValue = reflect.Append(fieldValue, obj)
+				pos += consumedPos
+			}
+		}
+
 		switch fieldT {
+		case "#":
+			if fieldKind >= reflect.Int && fieldKind <= reflect.Int64 {
+				flags = binary.LittleEndian.Uint32(data[pos : pos+4])
+			} else {
+				return pos, errors.New("unexpected field type for '#' TL type")
+			}
+			pos += 4
 		case "int":
 			n := binary.LittleEndian.Uint32(data[pos : pos+4])
 			if fieldKind >= reflect.Int && fieldKind <= reflect.Int64 {

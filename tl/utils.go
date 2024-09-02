@@ -1,6 +1,9 @@
 package tl
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 // getConstructor extract the constructor from the TL definition specified.
 func getConstructor(tlDef string) string {
@@ -42,7 +45,11 @@ func extractTypes(tlDef string) []string {
 		}
 
 		if start != -1 && tlDef[i] == ' ' && insideExpr == 0 {
-			result = append(result, tlDef[start:i])
+			def := tlDef[start:i]
+			def = strings.ReplaceAll(def, "(", "")
+			def = strings.ReplaceAll(def, ")", "")
+
+			result = append(result, def)
 			start = -1
 		}
 		i++
