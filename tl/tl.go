@@ -56,6 +56,7 @@ type TLHandler struct {
 func New() *TLHandler {
 	return &TLHandler{
 		register:      make(map[string]string),
+		tregister:     make(map[uint32]reflect.Type),
 		flagsRegister: make(map[string]int),
 	}
 }
@@ -203,7 +204,7 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 			// TODO: FIX for each element we should include the scheme ID
 			fIdx := fieldValue.Index(i)
 			// parse element
-			subBuff, err := t.serializeSimpleField(fIdx.Kind(), fIdx, tagVal)
+			subBuff, err := t.serializeSimpleField(fIdx.Kind(), fIdx, tagVal, true)
 			if err != nil {
 				return nil, err
 			}
@@ -214,10 +215,10 @@ func (t *TLHandler) serializeField(st reflect.Type, v reflect.Value, idx int) ([
 		return buff, nil
 	}
 
-	return t.serializeSimpleField(fieldKind, fieldValue, tagVal)
+	return t.serializeSimpleField(fieldKind, fieldValue, tagVal, false)
 }
 
-func (t *TLHandler) serializeSimpleField(fieldKind reflect.Kind, fieldValue reflect.Value, tagVal string) ([]byte, error) {
+func (t *TLHandler) serializeSimpleField(fieldKind reflect.Kind, fieldValue reflect.Value, tagVal string, insideVector bool) ([]byte, error) {
 	switch tagVal {
 	case "int":
 		buff := make([]byte, 4)
@@ -300,7 +301,7 @@ func (t *TLHandler) serializeSimpleField(fieldKind reflect.Kind, fieldValue refl
 			fV := fieldValue.Elem()
 			fK := fV.Kind()
 
-			return t.serializeSimpleField(fK, fV, tagVal)
+			return t.serializeSimpleField(fK, fV, tagVal, insideVector)
 		}
 
 		// in case is a custom type, check if is previously registered
@@ -309,6 +310,10 @@ func (t *TLHandler) serializeSimpleField(fieldKind reflect.Kind, fieldValue refl
 			if tagVal != combinator && tagVal != constructor {
 				return nil, errors.New("your tag definition doesn't correspond with the combinator or constructor in the registered definition")
 			}
+			if insideVector {
+				return t.Serialize(fieldValue.Interface(), true)
+			}
+
 			// check if is explicit or not, according to
 			// https://docs.ton.org/develop/data-formats/tl#non-obvious-serialization-rules
 			boxed := tagVal == getCombinator(tlDef)
