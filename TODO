@@ -12,7 +12,7 @@ This todo list will increase and decrease according to the progress. Don't take 
     - [DONE] Serialize flags on TL definition
     - [DONE] Handle 'vector' TL type for serialization
     - [DONE] Review again 'vector' TL serialization and parsing, take https://core.telegram.org/constructor/vector as reference and code in tonutils-go or ton blockchain repo. I think I finally got it right.
-    - [IN-PROGRESS] Handle 'vector' and flags cases for parsing(On hold untils will be needed)
+    - [DONE] Handle 'vector' and flags cases for parsing.
     - Improve TL structure tests, some of the tests cases are not generic enough
     - Refactor both serializer and parser, methods are too long
 - ADNL
