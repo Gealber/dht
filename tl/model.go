@@ -19,14 +19,14 @@ const (
 
 var (
 	DefaultTLModel = []ModelRegister{
-		{T: CreateChannel{}, Def: TLCreateChannel},
+		{T: AdnlMessageCreateChannel{}, Def: TLCreateChannel},
 		{T: GetSignedAddressList{}, Def: TLSignedAddressList},
 		{T: Query{}, Def: TLMessageQuery},
-		{T: UDP{}, Def: TLAddressUDP},
+		{T: AdnlAddressUDP{}, Def: TLAddressUDP},
 		{T: List{}, Def: TLAddressList},
 		{T: PublicKeyED25519{}, Def: TLPublicKeyEd25519},
 		{T: PublicKeyAES{}, Def: TLPublicKeyAES},
-		{T: PacketContent{}, Def: TLPacketContents},
+		{T: AdnlPacketContent{}, Def: TLPacketContents},
 		{T: Ping{}, Def: TLPing},
 		{T: Pong{}, Def: TLPong},
 	}
@@ -40,11 +40,6 @@ type Pong struct {
 	RandomID int64 `tl:"long"`
 }
 
-type CreateChannel struct {
-	Key  []byte `tl:"int256"`
-	Date int64  `tl:"int"`
-}
-
 type GetSignedAddressList struct{}
 
 type Query struct {
@@ -53,16 +48,21 @@ type Query struct {
 }
 
 type List struct {
-	Addresses  []UDP `tl:"vector struct boxed"`
-	Version    int64 `tl:"int"`
-	ReinitDate int64 `tl:"int"`
-	Priority   int64 `tl:"int"`
-	ExpireAt   int64 `tl:"int"`
+	Addresses  []AdnlAddressUDP `tl:"vector struct boxed"`
+	Version    int64            `tl:"int"`
+	ReinitDate int64            `tl:"int"`
+	Priority   int64            `tl:"int"`
+	ExpireAt   int64            `tl:"int"`
 }
 
-type UDP struct {
+type AdnlAddressUDP struct {
 	IP   net.IP `tl:"int"`
 	Port int32  `tl:"int"`
+}
+
+// Public keys definitions
+type PublicKeyUnenc struct {
+	Data []byte `tl:"bytes"`
 }
 
 type PublicKeyED25519 struct {
@@ -73,7 +73,11 @@ type PublicKeyAES struct {
 	Key []byte `tl:"int256"`
 }
 
-type PacketContent struct {
+type PublicKeyOverlay struct {
+	Name []byte `tl:"bytes"`
+}
+
+type AdnlPacketContent struct {
 	Rand1                       []byte           `tl:"bytes"`
 	Flags                       uint32           `tl:"flags"`
 	From                        PublicKeyED25519 `tl:"?0 PublicKey"`
@@ -90,4 +94,47 @@ type PacketContent struct {
 	DstReinitDate               int64            `tl:"?10 int"`
 	Signature                   []byte           `tl:"?11 bytes"`
 	Rand2                       []byte           `tl:"bytes"`
+}
+
+type AdnlTunnelPacketContents struct {
+	Rand1      []byte `tl:"bytes"`
+	Flags      uint32 `tl:"flags"`
+	FromIP     int    `tl:"flags.0?int"`
+	FromPort   int    `tl:"flags.0?int"`
+	Message    []byte `tl:"flags.1?bytes"`
+	Statistics []byte `tl:"flags.2?bytes"`
+	Payment    []byte `tl:"flags.3?bytes"`
+	Rand2      []byte `tl:"bytes"`
+}
+
+type AdnlMessageCreateChannel struct {
+	Key  []byte `tl:"int256"`
+	Date int64  `tl:"int"`
+}
+
+type AdnlMessageConfirmChannel struct {
+	Key      []byte `tl:"int256"`
+	PeerKKey []byte `tl:"int256"`
+	Date     int64  `tl:"int"`
+}
+
+type AdnlMessageCustom struct {
+	Data []byte `tl:"bytes"`
+}
+
+type AdnlMessageQuery struct {
+	QueryID []byte `tl:"int256"`
+	Query   []byte `tl:"bytes"`
+}
+
+type AdnlMessageAnswer struct {
+	QueryID []byte `tl:"int256"`
+	Answer  []byte `tl:"bytes"`
+}
+
+type AdnlMessagePart struct {
+	Hash      []byte `tl:"int256"`
+	TotalSize int    `tl:"int"`
+	Offset    int    `tl:"int"`
+	Data      []byte `tl:"bytes"`
 }

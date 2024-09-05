@@ -134,12 +134,12 @@ func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25
 
 	// register models in order to perform a TL serialization
 	models := []tl.ModelRegister{
-		{T: tl.PacketContent{}, Def: tl.TLPacketContents},
-		{T: tl.CreateChannel{}, Def: tl.TLCreateChannel},
+		{T: tl.AdnlPacketContent{}, Def: tl.TLPacketContents},
+		{T: tl.AdnlMessageCreateChannel{}, Def: tl.TLCreateChannel},
 		{T: tl.GetSignedAddressList{}, Def: tl.TLSignedAddressList},
 		{T: tl.PublicKeyED25519{}, Def: tl.TLPublicKeyEd25519},
 		{T: tl.Query{}, Def: tl.TLMessageQuery},
-		{T: tl.UDP{}, Def: tl.TLAddressUDP},
+		{T: tl.AdnlAddressUDP{}, Def: tl.TLAddressUDP},
 		{T: tl.List{}, Def: tl.TLAddressList},
 		{T: tl.Ping{}, Def: tl.TLPing},
 	}
@@ -152,7 +152,7 @@ func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25
 
 	// adnl.message.createChannel key:int256 date:int = adnl.Message;
 	date := time.Now().Unix()
-	createChn := tl.CreateChannel{
+	createChn := tl.AdnlMessageCreateChannel{
 		Key:  channelKey,
 		Date: date,
 	}
@@ -176,7 +176,7 @@ func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25
 	rand.Read(buff)
 	rand1, rand2 := buff[:15], buff[15:]
 
-	pkt := tl.PacketContent{
+	pkt := tl.AdnlPacketContent{
 		Rand1: rand1,
 		Flags: 0x05d9,
 		From: tl.PublicKeyED25519{
@@ -187,7 +187,7 @@ func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25
 			msgQuery,
 		},
 		AddressList: tl.List{
-			Addresses:  []tl.UDP{},
+			Addresses:  []tl.AdnlAddressUDP{},
 			Version:    date,
 			ReinitDate: date,
 			Priority:   0,
