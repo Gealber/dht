@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
-	"log"
 	"math/big"
 	"reflect"
 	"strconv"
@@ -362,12 +361,12 @@ func (t *TLHandler) parse(data []byte, objValue reflect.Value, boxed bool) (int,
 		// parse the 4-bytes scheme id
 		schemeID := data[:4]
 		if hex.EncodeToString(schemeID) != SchemeID(tlDef) {
-			return pos, errors.New("invalid scheme id according to tl definition registered, check if the tl definition is correct")
+			msgErr := fmt.Sprintf("invalid scheme id: %s according to tl definition registered: %s computed scheme id: %s, check if the tl definition is correct", hex.EncodeToString(schemeID), tlDef, SchemeID(tlDef))
+			return pos, errors.New(msgErr)
 		}
 		pos = 4
 	}
 
-	// TODO: this loops is assuming all fields are present, which is not correct
 	for i, fieldT := range inOrderTs {
 		fieldValue := vt.Field(i)
 		fieldKind := fieldValue.Kind()
@@ -413,16 +412,19 @@ func (t *TLHandler) parse(data []byte, objValue reflect.Value, boxed bool) (int,
 				if !ok {
 					return 0, fmt.Errorf("unregisterd type id: %d", id)
 				}
+				pos += 4
 
 				obj := reflect.New(elemT)
 
-				consumedPos, err := t.parse(data[pos:], obj, boxed)
+				// passed as not boxed because we already consumed the id previously
+				consumedPos, err := t.parse(data[pos:], obj, false)
 				if err != nil {
 					return 0, err
 				}
 				fieldValue = reflect.Append(fieldValue, obj)
 				pos += consumedPos
 			}
+			continue
 		}
 
 		switch fieldT {
@@ -553,7 +555,6 @@ func (t *TLHandler) parse(data []byte, objValue reflect.Value, boxed bool) (int,
 				}
 				pos += consumed
 			} else {
-				log.Println("FIELD TYPE: ", fieldT)
 				return pos, errors.New("unregistered custom type as field")
 			}
 		}
