@@ -132,14 +132,12 @@ func (p *Peer) processMsgIn(data []byte) {
 	// let's build our shared secret as explained in the documentation
 	sharedSecret, err := utils.GenerateSharedKey(p.privKey, senderPubKey)
 	if err != nil {
-		// log the error and ignore the packet
 		p.logger.Println("error generating shared key:", err)
 		return
 	}
 
 	cipher, err := utils.BuildSharedCipher(sharedSecret, checksum)
 	if err != nil {
-		// log the error and ignore the packet
 		p.logger.Println("error while building shared cipher:", err)
 		return
 	}
@@ -161,7 +159,7 @@ func (p *Peer) processMsgIn(data []byte) {
 }
 
 func (p *Peer) parseMsgIn(data []byte) error {
-	var obj tl.PacketContent
+	var obj tl.AdnlPacketContent
 	err := p.tlH.Parse(data, &obj, true)
 	if err != nil {
 		return err
@@ -185,6 +183,6 @@ func (p *Peer) parseMsgIn(data []byte) error {
 }
 
 // TODO: implement
-func (p *Peer) packetContentValidation(pkt tl.PacketContent) error {
+func (p *Peer) packetContentValidation(pkt tl.AdnlPacketContent) error {
 	return nil
 }
