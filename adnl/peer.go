@@ -26,9 +26,10 @@ type Peer struct {
 	conn    net.Conn
 	tlH     *tl.TLHandler
 
+	// channels in the context of adnl protocol, read doc/adnl/adnl-udp.md for more details
 	chns   map[string]channel
 	logger *log.Logger
-	// add a closer channel to handle close connection
+	// TODO: add a closer channel to handle close connection
 }
 
 type channel struct {
@@ -171,18 +172,40 @@ func (p *Peer) parseMsgIn(data []byte) error {
 		return err
 	}
 
-	// TODO: process the single message
 	if obj.Message != nil {
+		err := handleInMsgTypes(obj.Message)
+		if err != nil {
+			return err
+		}
 	}
 
-	// TODO: process each of the messages in the adnl.packetContent
-	// for _, msg := range obj.Messages {
-	// }
+	for _, msg := range obj.Messages {
+		err := handleInMsgTypes(msg)
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
 
 // TODO: implement
 func (p *Peer) packetContentValidation(pkt tl.AdnlPacketContent) error {
+	return nil
+}
+
+func handleInMsgTypes(msg any) error {
+	switch msg.(type) {
+	case tl.AdnlMessageCreateChannel:
+	case tl.AdnlMessageConfirmChannel:
+	case tl.AdnlMessageAnswer:
+	case tl.Ping:
+		// answering with PONG
+	case tl.Pong:
+		// update metric of node who sent the PONG response
+	case tl.AdnlMessageCustom:
+	default:
+	}
+
 	return nil
 }
