@@ -197,7 +197,7 @@ func (p *Peer) parseMsgIn(senderIDStr string, data []byte) error {
 	}
 
 	if obj.Message != nil {
-		msgAnswer, err := p.handleInMsgTypes(senderIDStr, obj.Message)
+		msgAnswer, err := p.buildAnswer(senderIDStr, obj.Message)
 		if err != nil {
 			return err
 		}
@@ -208,7 +208,7 @@ func (p *Peer) parseMsgIn(senderIDStr string, data []byte) error {
 	}
 
 	for _, msg := range obj.Messages {
-		msgAnswer, err := p.handleInMsgTypes(senderIDStr, msg)
+		msgAnswer, err := p.buildAnswer(senderIDStr, msg)
 		if err != nil {
 			return err
 		}
@@ -226,7 +226,7 @@ func (p *Peer) packetContentValidation(pkt tl.AdnlPacketContent) error {
 	return nil
 }
 
-func (p *Peer) handleInMsgTypes(senderIDStr string, msg any) ([]byte, error) {
+func (p *Peer) buildAnswer(senderIDStr string, msg any) ([]byte, error) {
 	switch msg.(type) {
 	case tl.AdnlMessageCreateChannel:
 		return nil, errors.New("not implemented message type")
