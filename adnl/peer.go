@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -12,10 +13,18 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
 
 	"github.com/Gealber/dht/tl"
 	"github.com/Gealber/dht/utils"
+	"github.com/xssnick/tonutils-go/adnl"
 )
+
+type PeerMetric struct {
+	id         []byte
+	delay      int64
+	lastPingTs int64
+}
 
 type Peer struct {
 	// peer id
@@ -29,6 +38,8 @@ type Peer struct {
 	// channels in the context of adnl protocol, read doc/adnl/adnl-udp.md for more details
 	chns   map[string]channel
 	logger *log.Logger
+	// sorted array with known peer ids
+	peersMetric map[string]PeerMetric
 	// TODO: add a closer channel to handle close connection
 }
 
@@ -59,13 +70,14 @@ func New(privKey ed25519.PrivateKey, pubKey ed25519.PublicKey, port int) (*Peer,
 	}
 
 	return &Peer{
-		id:      id,
-		port:    port,
-		privKey: privKey,
-		pubKey:  pubKey,
-		tlH:     tlH,
-		chns:    make(map[string]channel),
-		logger:  log.New(os.Stdout, "[adnl-peer]", log.LUTC),
+		id:          id,
+		port:        port,
+		privKey:     privKey,
+		pubKey:      pubKey,
+		tlH:         tlH,
+		chns:        make(map[string]channel),
+		logger:      log.New(os.Stdout, "[adnl-peer]", log.LUTC),
+		peersMetric: make(map[string]PeerMetric),
 	}, nil
 }
 
@@ -76,6 +88,7 @@ func (p *Peer) Listen() error {
 	if err != nil {
 		return err
 	}
+	p.conn = conn
 
 	// read loop
 	for {
@@ -130,6 +143,17 @@ func (p *Peer) processMsgIn(data []byte) {
 	senderPubKey := data[:32]
 	checksum := data[32:64]
 	data = data[64:]
+
+	senderID, err := p.computePeerID(senderPubKey)
+	if err != nil {
+		p.logger.Println("error generating shared key:", err)
+		return
+	}
+	senderIDStr := hex.EncodeToString(senderID[:])
+	if _, ok := p.peersMetric[senderIDStr]; !ok {
+		p.peersMetric[senderIDStr] = PeerMetric{id: senderID[:], delay: -1}
+	}
+
 	// let's build our shared secret as explained in the documentation
 	sharedSecret, err := utils.GenerateSharedKey(p.privKey, senderPubKey)
 	if err != nil {
@@ -152,14 +176,14 @@ func (p *Peer) processMsgIn(data []byte) {
 	}
 
 	// TODO: parse unencrypted packet, packet should be an adnl.packetContent
-	err = p.parseMsgIn(data)
+	err = p.parseMsgIn(senderIDStr, data)
 	if err != nil {
 		p.logger.Println("failed parsing of message err:", err)
 		return
 	}
 }
 
-func (p *Peer) parseMsgIn(data []byte) error {
+func (p *Peer) parseMsgIn(senderIDStr string, data []byte) error {
 	var obj tl.AdnlPacketContent
 	err := p.tlH.Parse(data, &obj, true)
 	if err != nil {
@@ -173,16 +197,24 @@ func (p *Peer) parseMsgIn(data []byte) error {
 	}
 
 	if obj.Message != nil {
-		err := handleInMsgTypes(obj.Message)
+		msgAnswer, err := p.handleInMsgTypes(senderIDStr, obj.Message)
 		if err != nil {
 			return err
+		}
+
+		if len(msgAnswer) > 0 {
+			// TODO: APPEND to answers in adnl.packetContent
 		}
 	}
 
 	for _, msg := range obj.Messages {
-		err := handleInMsgTypes(msg)
+		msgAnswer, err := p.handleInMsgTypes(senderIDStr, msg)
 		if err != nil {
 			return err
+		}
+
+		if len(msgAnswer) > 0 {
+			// TODO: APPEND to answers in adnl.packetContent
 		}
 	}
 
@@ -194,18 +226,55 @@ func (p *Peer) packetContentValidation(pkt tl.AdnlPacketContent) error {
 	return nil
 }
 
-func handleInMsgTypes(msg any) error {
+func (p *Peer) handleInMsgTypes(senderIDStr string, msg any) ([]byte, error) {
 	switch msg.(type) {
 	case tl.AdnlMessageCreateChannel:
+		return nil, errors.New("not implemented message type")
 	case tl.AdnlMessageConfirmChannel:
+		return nil, errors.New("not implemented message type")
 	case tl.AdnlMessageAnswer:
+		return nil, errors.New("not implemented message type")
 	case tl.Ping:
 		// answering with PONG
+		buff := make([]byte, 4)
+		rand.Read(buff)
+		value := binary.LittleEndian.Uint32(buff)
+		pongCmd := adnl.MessagePong{
+			Value: int64(value),
+		}
+
+		data, err := p.tlH.Serialize(&pongCmd, true)
+		if err != nil {
+			return nil, err
+		}
+
+		return data, nil
 	case tl.Pong:
 		// update metric of node who sent the PONG response
+		peerInfo, ok := p.peersMetric[senderIDStr]
+		if !ok {
+			// unwanted PONG message
+			return nil, errors.New("unwanted PONG message received from unregistered peer")
+		}
+
+		peerInfo.delay = time.Now().Unix() - peerInfo.lastPingTs
+		log.Printf("PEER: %s DELAY: %d\n", senderIDStr, peerInfo.delay)
+		return nil, nil
 	case tl.AdnlMessageCustom:
+		return nil, errors.New("not implemented message type")
 	default:
+		return nil, errors.New("unsupported message type")
+	}
+}
+
+func (p *Peer) computePeerID(pubKey []byte) ([32]byte, error) {
+	// register peer in known peers
+	d, err := p.tlH.Serialize(&adnl.PublicKeyED25519{Key: pubKey}, true)
+	if err != nil {
+		return [32]byte{}, err
 	}
 
-	return nil
+	return sha256.Sum256(d), nil
 }
+
+func buildPacket() {}
