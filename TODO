@@ -23,7 +23,12 @@ This todo list will increase and decrease according to the progress. Don't take 
         - [IN-PROGRESS] Read ADNL implementation in ton blockchain, yeah I don't understand C++
         - [IN-PROGRESS] Start implementing the protocol.
             - [DONE] Perform checksum validation on messages OUTSIDE channel 
-            - [] Perform checksum validation on messages IN channel 
+            - [DONE] Perform checksum validation on messages IN channel 
+            - [] Method for building adnl.packetContent packets
+            - [] Handle received PING, PONG commands
+            - [] Handle received CREATE CHANNEL commands
+            - [] Implement out PING, PONG commands
+            - [] Implement out CREATE and CONFIRM channel commands
     - [DONE] Implement AES-CTR cipher
     - Handle responses from adnl requests. Current implementation is assuming adnl is async.
 - DHT methods
