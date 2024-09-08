@@ -13,11 +13,11 @@ import (
 	"log"
 	"net"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gealber/dht/tl"
 	"github.com/Gealber/dht/utils"
-	"github.com/xssnick/tonutils-go/adnl"
 )
 
 type PeerMetric struct {
@@ -26,6 +26,7 @@ type PeerMetric struct {
 	lastPingTs int64
 }
 
+// TODO: checkout access to fields on concurrency call, we might need to use some lock
 type Peer struct {
 	// peer id
 	id      []byte
@@ -41,6 +42,8 @@ type Peer struct {
 	// sorted array with known peer ids
 	peersMetric map[string]PeerMetric
 	// TODO: add a closer channel to handle close connection
+	seqno        atomic.Int64
+	confirmSeqno atomic.Int64
 }
 
 type channel struct {
@@ -197,23 +200,23 @@ func (p *Peer) parseMsgIn(senderIDStr string, data []byte) error {
 	}
 
 	if obj.Message != nil {
-		msgAnswer, err := p.buildAnswer(senderIDStr, obj.Message)
+		msgAnswer, err := p.buildMessageAnswer(senderIDStr, obj.Message)
 		if err != nil {
 			return err
 		}
 
-		if len(msgAnswer) > 0 {
+		if msgAnswer != nil {
 			// TODO: APPEND to answers in adnl.packetContent
 		}
 	}
 
 	for _, msg := range obj.Messages {
-		msgAnswer, err := p.buildAnswer(senderIDStr, msg)
+		msgAnswer, err := p.buildMessageAnswer(senderIDStr, msg)
 		if err != nil {
 			return err
 		}
 
-		if len(msgAnswer) > 0 {
+		if msgAnswer != nil {
 			// TODO: APPEND to answers in adnl.packetContent
 		}
 	}
@@ -226,7 +229,7 @@ func (p *Peer) packetContentValidation(pkt tl.AdnlPacketContent) error {
 	return nil
 }
 
-func (p *Peer) buildAnswer(senderIDStr string, msg any) ([]byte, error) {
+func (p *Peer) buildMessageAnswer(senderIDStr string, msg any) (any, error) {
 	switch msg.(type) {
 	case tl.AdnlMessageCreateChannel:
 		return nil, errors.New("not implemented message type")
@@ -239,16 +242,11 @@ func (p *Peer) buildAnswer(senderIDStr string, msg any) ([]byte, error) {
 		buff := make([]byte, 4)
 		rand.Read(buff)
 		value := binary.LittleEndian.Uint32(buff)
-		pongCmd := adnl.MessagePong{
-			Value: int64(value),
+		pongCmd := tl.Pong{
+			RandomID: int64(value),
 		}
 
-		data, err := p.tlH.Serialize(&pongCmd, true)
-		if err != nil {
-			return nil, err
-		}
-
-		return data, nil
+		return pongCmd, nil
 	case tl.Pong:
 		// update metric of node who sent the PONG response
 		peerInfo, ok := p.peersMetric[senderIDStr]
@@ -269,7 +267,7 @@ func (p *Peer) buildAnswer(senderIDStr string, msg any) ([]byte, error) {
 
 func (p *Peer) computePeerID(pubKey []byte) ([32]byte, error) {
 	// register peer in known peers
-	d, err := p.tlH.Serialize(&adnl.PublicKeyED25519{Key: pubKey}, true)
+	d, err := p.tlH.Serialize(&tl.PublicKeyED25519{Key: pubKey}, true)
 	if err != nil {
 		return [32]byte{}, err
 	}
@@ -277,4 +275,77 @@ func (p *Peer) computePeerID(pubKey []byte) ([32]byte, error) {
 	return sha256.Sum256(d), nil
 }
 
-func buildPacket() {}
+// TODO: Extend this method to compute flag on the fly
+func (p *Peer) buildSignedPacket(
+	fromIDShort []byte,
+	msg any, msgs []any,
+	addresses, pritorityAddresses []tl.AdnlAddressUDP,
+) ([]byte, error) {
+	date := time.Now().Unix()
+	rand1, rand2 := utils.RandomBuff()
+
+	p.seqno.Add(1)
+
+	pkt := tl.AdnlPacketContent{
+		Rand1: rand1,
+		// initial flags has bytes 0, 6, 7, 8, 9, and 10 set
+		Flags: 0x7c1,
+		From: tl.PublicKeyED25519{
+			Key: p.pubKey,
+		},
+		Seqno:               p.seqno.Load(),
+		ConfirmSeqno:        p.confirmSeqno.Load(),
+		RecvAddrListVersion: date,
+		ReinitDate:          date,
+		DstReinitDate:       0,
+		Rand2:               rand2,
+	}
+
+	if len(fromIDShort) > 0 {
+		pkt.Flags |= 0b11
+		pkt.FromIDShort = fromIDShort
+	}
+
+	if msg != nil {
+		pkt.Flags |= 0b111
+		pkt.Message = msg
+	}
+
+	if len(msgs) > 0 {
+		pkt.Flags |= 0b1111
+		pkt.Messages = msgs
+	}
+
+	if len(addresses) > 0 {
+		pkt.Flags |= 0b11111
+		pkt.AddressList = tl.AdnlAddressList{
+			Addresses:  addresses,
+			Version:    date,
+			ReinitDate: date,
+			Priority:   0,
+			ExpireAt:   0,
+		}
+	}
+
+	if len(pritorityAddresses) > 0 {
+		pkt.Flags |= 0b111111
+		pkt.PriorityAddressList = tl.AdnlAddressList{
+			Addresses:  pritorityAddresses,
+			Version:    date,
+			ReinitDate: date,
+			Priority:   0,
+			ExpireAt:   0,
+		}
+	}
+
+	data, err := p.tlH.Serialize(pkt, true)
+	if err != nil {
+		return nil, err
+	}
+
+	pkt.Signature = ed25519.Sign(p.privKey, data)
+	pkt.Flags |= 0b111111111111
+
+	// TODO: add signature avoiding the process of double serialization
+	return p.tlH.Serialize(pkt, true)
+}
