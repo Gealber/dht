@@ -140,7 +140,7 @@ func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25
 		{T: tl.PublicKeyED25519{}, Def: tl.TLPublicKeyEd25519},
 		{T: tl.Query{}, Def: tl.TLMessageQuery},
 		{T: tl.AdnlAddressUDP{}, Def: tl.TLAddressUDP},
-		{T: tl.List{}, Def: tl.TLAddressList},
+		{T: tl.AdnlAddressList{}, Def: tl.TLAddressList},
 		{T: tl.Ping{}, Def: tl.TLPing},
 	}
 	tlHandler.Register(models)
@@ -186,7 +186,7 @@ func buildExamplePayload(dhtNodeKey []byte, ourPub ed25519.PublicKey, ourPk ed25
 			createChn,
 			msgQuery,
 		},
-		AddressList: tl.List{
+		AddressList: tl.AdnlAddressList{
 			Addresses:  []tl.AdnlAddressUDP{},
 			Version:    date,
 			ReinitDate: date,

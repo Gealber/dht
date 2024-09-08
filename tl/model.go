@@ -23,7 +23,7 @@ var (
 		{T: GetSignedAddressList{}, Def: TLSignedAddressList},
 		{T: Query{}, Def: TLMessageQuery},
 		{T: AdnlAddressUDP{}, Def: TLAddressUDP},
-		{T: List{}, Def: TLAddressList},
+		{T: AdnlAddressList{}, Def: TLAddressList},
 		{T: PublicKeyED25519{}, Def: TLPublicKeyEd25519},
 		{T: PublicKeyAES{}, Def: TLPublicKeyAES},
 		{T: AdnlPacketContent{}, Def: TLPacketContents},
@@ -47,7 +47,7 @@ type Query struct {
 	Query   []byte `tl:"bytes"`
 }
 
-type List struct {
+type AdnlAddressList struct {
 	Addresses  []AdnlAddressUDP `tl:"vector struct boxed"`
 	Version    int64            `tl:"int"`
 	ReinitDate int64            `tl:"int"`
@@ -84,8 +84,8 @@ type AdnlPacketContent struct {
 	FromIDShort                 []byte           `tl:"?1 adnl.id.short"`
 	Message                     any              `tl:"?2 adnl.Message"`
 	Messages                    []any            `tl:"?3 vector adnl.Message"`
-	AddressList                 List             `tl:"?4 adnl.addressList"`
-	PriorityAddressList         List             `tl:"?5 adnl.addressList"`
+	AddressList                 AdnlAddressList  `tl:"?4 adnl.addressList"`
+	PriorityAddressList         AdnlAddressList  `tl:"?5 adnl.addressList"`
 	Seqno                       int64            `tl:"?6 long"`
 	ConfirmSeqno                int64            `tl:"?7 long"`
 	RecvAddrListVersion         int64            `tl:"?7 int"`
